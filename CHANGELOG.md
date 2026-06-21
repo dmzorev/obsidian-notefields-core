@@ -9,10 +9,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Compact nested object previews with focus-to-edit behavior in Obsidian Bases tables.
+- Optional `renderBase` API for field types that need a dedicated Obsidian Bases presentation.
+- Nested preview settings for outer braces and expanded nested values.
+- Property type menus on nested keys and list items.
 
 ### Fixed
 
 - Multiselect values in Bases tables now remain left-aligned on one line when the cell is too narrow.
+- Nested editors now return to their compact preview when focus leaves the Bases cell.
+- Nested add and delete actions keep the Bases editor open across value updates.
+- Nested empty text values and add controls now follow the compact Obsidian properties style.
+- NoteFields values now use the same small horizontal inset as standard Bases values.
+- Select and Multiselect fields now clip predictably in narrow Bases columns without overlapping adjacent cells.
 
 ## [1.0.0] - 2026-06-21
 

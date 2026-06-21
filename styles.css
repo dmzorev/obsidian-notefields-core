@@ -139,6 +139,17 @@ button.props-framework-icon-chip.is-empty:hover {
 	height: 14px;
 }
 
+.props-framework-option-icon {
+	flex: 0 0 auto;
+}
+
+.props-framework-option-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .props-framework-pills,
 .props-framework-multiselect-controls,
 .props-framework-multiselect-inline {
@@ -170,8 +181,55 @@ button.props-framework-icon-chip.is-empty:hover {
 	overflow: hidden;
 }
 
+.bases-table-cell .props-framework-multiselect.is-viewing .props-framework-multiselect-inline {
+	-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent 100%);
+	mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent 100%);
+}
+
 .bases-table-cell .props-framework-multiselect.is-viewing .props-framework-value-pill {
 	flex: 0 0 auto;
+	box-sizing: border-box;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.bases-table-cell .props-framework-multiselect.is-viewing .props-framework-value-pill:first-child {
+	max-width: 100%;
+}
+
+.bases-table-cell .props-framework-select.is-viewing {
+	flex-wrap: nowrap;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.bases-table-cell .props-framework-select.is-viewing .props-framework-value-pill {
+	box-sizing: border-box;
+	flex: 1 1 auto;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+}
+
+.bases-table-cell:has(
+	:is(
+		.props-framework-select,
+		.props-framework-multiselect,
+		.props-framework-nested
+	)
+) {
+	box-sizing: border-box;
+	padding-inline: var(--size-4-2, 8px);
+}
+
+.bases-table-cell:has(
+	:is(
+		.props-framework-select.is-viewing,
+		.props-framework-multiselect.is-viewing,
+		.props-framework-nested.is-viewing
+	)
+) {
+	overflow: hidden;
 }
 
 .props-framework-pill {
@@ -415,7 +473,7 @@ button.props-framework-value-pill {
 }
 
 .bases-table-cell .props-framework-nested.is-editing .props-framework-nested-row.is-array-item {
-	grid-template-columns: minmax(120px, 1fr) auto;
+	grid-template-columns: auto minmax(120px, 1fr) auto;
 }
 
 .props-framework-nested-entries {
@@ -434,10 +492,14 @@ button.props-framework-value-pill {
 }
 
 .props-framework-nested-row.is-array-item {
-	grid-template-columns: minmax(160px, 1fr) auto;
+	grid-template-columns: auto minmax(160px, 1fr) auto;
 }
 
 .props-framework-nested-key {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
 	color: var(--text-muted);
 	font-size: var(--metadata-label-font-size);
 	line-height: var(--line-height-tight);
@@ -446,7 +508,8 @@ button.props-framework-value-pill {
 
 .props-framework-nested-key-label {
 	display: block;
-	width: 100%;
+	flex: 1 1 auto;
+	min-width: 0;
 	min-height: 24px;
 	border: 1px solid transparent;
 	background: transparent;
@@ -471,6 +534,24 @@ button.props-framework-value-pill {
 	border-color: var(--text-error);
 }
 
+.props-framework-nested-type-button {
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+	padding: 4px;
+	color: var(--text-muted);
+}
+
+.props-framework-nested-type-button svg {
+	width: 16px;
+	height: 16px;
+}
+
+.props-framework-nested-array-type {
+	display: flex;
+	align-items: center;
+}
+
 .props-framework-nested-value {
 	min-width: 0;
 }
@@ -478,6 +559,18 @@ button.props-framework-value-pill {
 .props-framework-nested-value input[type="text"],
 .props-framework-nested-value input[type="number"] {
 	width: 100%;
+}
+
+.props-framework-nested-value input[type="text"]:not(:focus),
+.props-framework-nested-value input[type="number"]:not(:focus) {
+	border-color: transparent;
+	background: transparent;
+	box-shadow: none;
+}
+
+.props-framework-nested-value input::placeholder {
+	color: var(--text-faint);
+	opacity: 1;
 }
 
 .props-framework-nested-actions {
@@ -501,11 +594,6 @@ button.props-framework-value-pill {
 	cursor: var(--cursor);
 }
 
-.props-framework-nested-type-icon svg {
-	width: 14px;
-	height: 14px;
-}
-
 .props-framework-nested-body {
 	margin-left: 12px;
 	padding-left: 8px;
@@ -520,11 +608,26 @@ button.props-framework-value-pill {
 	margin-top: 6px;
 }
 
-.props-framework-add-button {
+button.props-framework-add-button {
+	appearance: none;
 	display: inline-flex;
+	width: fit-content;
 	align-items: center;
 	gap: 4px;
+	padding: 2px 4px;
+	border: 1px solid transparent !important;
 	border-radius: var(--radius-s);
+	background-color: transparent !important;
+	box-shadow: none !important;
+	color: var(--text-muted);
+	font-size: var(--metadata-label-font-size);
+}
+
+button.props-framework-add-button:hover {
+	border-color: var(--background-modifier-border-hover) !important;
+	background-color: var(--background-modifier-hover) !important;
+	box-shadow: none !important;
+	color: var(--text-normal);
 }
 
 .props-framework-add-button svg {
@@ -532,13 +635,24 @@ button.props-framework-value-pill {
 	height: 14px;
 }
 
-.props-framework-kind-select {
-	max-width: 120px;
+.props-framework-add-property-input {
+	min-width: 120px;
+	padding: 2px 4px;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-normal);
+	font: inherit;
+	outline: none;
 }
 
 @media (max-width: 600px) {
 	.props-framework-nested-row {
 		grid-template-columns: 1fr auto;
+	}
+
+	.props-framework-nested-row.is-array-item {
+		grid-template-columns: auto 1fr auto;
 	}
 
 	.props-framework-nested-key {

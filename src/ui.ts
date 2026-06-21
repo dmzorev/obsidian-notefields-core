@@ -29,7 +29,10 @@ export function renderOptionLabel(parentEl: HTMLElement, option: PropertyOption)
 		setIcon(iconEl, option.icon);
 	}
 
-	parentEl.createSpan({ text: option.label ?? option.value });
+	parentEl.createSpan({
+		cls: "props-framework-option-label",
+		text: option.label ?? option.value,
+	});
 }
 
 export function uniqueOptions(options: PropertyOption[]): PropertyOption[] {

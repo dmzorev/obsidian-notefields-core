@@ -1,9 +1,17 @@
-import { Setting, setIcon } from "obsidian";
-import type { NestedPropertyConfig, PropertyType } from "../types";
+import { Menu, Setting, setIcon } from "obsidian";
+import type { NestedPropertyConfig, PropertyRenderContext, PropertyType, PropertyWidgetComponent } from "../types";
 import { containMetadataEvents, renderValidation, stopMetadataEvent } from "../ui";
 
 type JsonObject = Record<string, unknown>;
 type NewValueKind = "text" | "number" | "checkbox" | "object" | "list";
+const BASES_EDITING_CLASS = "props-framework-is-editing-nested";
+const NESTED_VALUE_KINDS: Array<{ icon: string; label: string; value: NewValueKind }> = [
+	{ icon: "lucide-align-left", label: "Text", value: "text" },
+	{ icon: "lucide-binary", label: "Number", value: "number" },
+	{ icon: "lucide-square-check-big", label: "Checkbox", value: "checkbox" },
+	{ icon: "lucide-braces", label: "Object", value: "object" },
+	{ icon: "lucide-list-tree", label: "List", value: "list" },
+];
 
 export function createNestedType(): PropertyType<NestedPropertyConfig> {
 	return {
@@ -13,6 +21,8 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 		icon: "lucide-braces",
 		defaultConfig: {
 			defaultCollapsed: false,
+			basesShowRootBraces: false,
+			basesExpandNestedValues: true,
 		},
 		validate(value) {
 			if (isPlainObject(value)) {
@@ -27,67 +37,8 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 		normalize(value) {
 			return isPlainObject(value) ? value : {};
 		},
-		render(el, ctx) {
-			let value = isPlainObject(ctx.value) ? ctx.value : {};
-			const collapsedPaths = new Set<string>();
-			const isBasesCell = Boolean(el.closest(".bases-table-cell"));
-			let isEditing = !isBasesCell;
-
-			const render = (): void => {
-				el.empty();
-				const rootEl = el.createDiv({
-					attr: {
-						"aria-label": isEditing ? "Edit nested object" : "Open nested object editor",
-						tabindex: isEditing ? "-1" : "0",
-					},
-					cls: ["props-framework-nested", isEditing ? "is-editing" : "is-viewing"],
-				});
-				containMetadataEvents(rootEl);
-				if (isEditing) {
-					renderObject(rootEl, value, "", ctx.config.defaultCollapsed, collapsedPaths, (nextValue) => {
-						value = nextValue;
-						ctx.onChange(nextValue);
-						render();
-					});
-				} else {
-					renderObjectPreview(rootEl, value);
-					rootEl.addEventListener("click", openEditor);
-					rootEl.addEventListener("focus", openEditor);
-				}
-
-				if (isBasesCell && isEditing) {
-					rootEl.addEventListener("focusout", () => {
-						window.setTimeout(() => {
-							if (!rootEl.isConnected || rootEl.contains(document.activeElement)) {
-								return;
-							}
-							isEditing = false;
-							render();
-						}, 0);
-					});
-				}
-				renderValidation(el, ctx.validate(value));
-			};
-
-			const openEditor = (): void => {
-				if (isEditing) {
-					focusFirstNestedControl(el);
-					return;
-				}
-				isEditing = true;
-				render();
-				focusFirstNestedControl(el);
-			};
-
-			render();
-
-			return {
-				type: "notefields:nested",
-				focus: () => {
-					openEditor();
-				},
-			};
-		},
+		render: renderNestedEditor,
+		renderBase: renderNestedBase,
 		renderSettings(el, ctx) {
 			new Setting(el)
 				.setName("Collapsed by default")
@@ -102,34 +53,186 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 							},
 						});
 					}));
+
+			new Setting(el)
+				.setName("Show outer braces in bases")
+				.setDesc("Wrap the top-level object preview in braces.")
+				.addToggle((toggle) => toggle
+					.setValue(ctx.definition.config.basesShowRootBraces)
+					.onChange(async (basesShowRootBraces) => {
+						await ctx.updateDefinition({
+							...ctx.definition,
+							config: {
+								...ctx.definition.config,
+								basesShowRootBraces,
+							},
+						});
+					}));
+
+			new Setting(el)
+				.setName("Expand nested values in bases")
+				.setDesc("Show compact nested content instead of only item counts.")
+				.addToggle((toggle) => toggle
+					.setValue(ctx.definition.config.basesExpandNestedValues)
+					.onChange(async (basesExpandNestedValues) => {
+						await ctx.updateDefinition({
+							...ctx.definition,
+							config: {
+								...ctx.definition.config,
+								basesExpandNestedValues,
+							},
+						});
+					}));
 		},
 	};
 }
 
-function renderObjectPreview(parentEl: HTMLElement, value: JsonObject): void {
-	const text = formatObjectPreview(value);
+function renderNestedEditor(
+	el: HTMLElement,
+	ctx: PropertyRenderContext<NestedPropertyConfig>
+): PropertyWidgetComponent {
+	let value = isPlainObject(ctx.value) ? ctx.value : {};
+	const collapsedPaths = new Set<string>();
+	const render = (): void => {
+		el.empty();
+		const rootEl = el.createDiv({ cls: ["props-framework-nested", "is-editing"] });
+		containMetadataEvents(rootEl);
+		renderObject(rootEl, value, "", ctx.config.defaultCollapsed, collapsedPaths, (nextValue) => {
+			value = nextValue;
+			ctx.onChange(nextValue);
+			render();
+		});
+		renderValidation(el, ctx.validate(value));
+	};
+
+	render();
+	return {
+		type: "notefields:nested",
+		focus: () => focusFirstNestedControl(el),
+	};
+}
+
+function renderNestedBase(
+	el: HTMLElement,
+	ctx: PropertyRenderContext<NestedPropertyConfig>
+): PropertyWidgetComponent {
+	let value = isPlainObject(ctx.value) ? ctx.value : {};
+	const collapsedPaths = new Set<string>();
+	const hostEl = getBasesHost(el);
+	let isEditing = hostEl.hasClass(BASES_EDITING_CLASS);
+
+	const endEditing = (): void => {
+		hostEl.removeClass(BASES_EDITING_CLASS);
+		isEditing = false;
+		render();
+		ctx.blur();
+	};
+
+	const openEditor = (): void => {
+		hostEl.addClass(BASES_EDITING_CLASS);
+		if (!isEditing) {
+			isEditing = true;
+			render();
+		}
+		focusFirstNestedControl(el);
+	};
+
+	const render = (): void => {
+		el.empty();
+		const rootEl = el.createDiv({
+			attr: {
+				"aria-label": isEditing ? "Edit nested object" : "Open nested object editor",
+				tabindex: isEditing ? "-1" : "0",
+			},
+			cls: ["props-framework-nested", isEditing ? "is-editing" : "is-viewing"],
+		});
+		containMetadataEvents(rootEl);
+
+		if (isEditing) {
+			renderObject(rootEl, value, "", ctx.config.defaultCollapsed, collapsedPaths, (nextValue) => {
+				value = nextValue;
+				hostEl.addClass(BASES_EDITING_CLASS);
+				ctx.onChange(nextValue);
+				render();
+				focusFirstNestedControl(el);
+			});
+			rootEl.addEventListener("focusout", () => {
+				window.setTimeout(() => {
+					if (!rootEl.isConnected || rootEl.contains(document.activeElement)) {
+						return;
+					}
+					endEditing();
+				}, 0);
+			});
+		} else {
+			renderObjectPreview(rootEl, value, ctx.config);
+			rootEl.addEventListener("click", openEditor);
+			rootEl.addEventListener("focus", openEditor);
+		}
+
+		renderValidation(el, ctx.validate(value));
+	};
+
+	render();
+	if (isEditing) {
+		focusFirstNestedControl(el);
+	}
+
+	return {
+		type: "notefields:nested",
+		focus: openEditor,
+	};
+}
+
+function getBasesHost(el: HTMLElement): HTMLElement {
+	const hostEl = el.closest(".bases-table-cell, .bases-cards-line, .bases-list-property");
+	return hostEl instanceof HTMLElement ? hostEl : el;
+}
+
+function renderObjectPreview(parentEl: HTMLElement, value: JsonObject, config: NestedPropertyConfig): void {
+	const text = formatObjectPreview(value, config);
 	parentEl.createDiv({
-		attr: { title: text },
+		attr: text ? { title: text } : undefined,
 		cls: "props-framework-nested-preview",
 		text,
 	});
 }
 
-function formatObjectPreview(value: JsonObject): string {
+function formatObjectPreview(value: JsonObject, config: NestedPropertyConfig): string {
 	const entries = Object.entries(value);
 	if (entries.length === 0) {
-		return "Empty object";
+		return "";
 	}
 
-	return `{ ${entries.map(([key, childValue]) => `${key}: ${formatPreviewValue(childValue)}`).join(", ")} }`;
+	const content = formatPreviewEntries(entries, config.basesExpandNestedValues, 0);
+	return config.basesShowRootBraces ? `{ ${content} }` : content;
 }
 
-function formatPreviewValue(value: unknown): string {
+function formatPreviewEntries(entries: Array<[string, unknown]>, expandNested: boolean, depth: number): string {
+	const visibleEntries = entries.slice(0, 6)
+		.map(([key, value]) => `${key}: ${formatPreviewValue(value, expandNested, depth)}`);
+	if (entries.length > visibleEntries.length) {
+		visibleEntries.push("...");
+	}
+	return visibleEntries.join(", ");
+}
+
+function formatPreviewValue(value: unknown, expandNested: boolean, depth: number): string {
 	if (Array.isArray(value)) {
-		return `[${value.length}]`;
+		if (!expandNested || depth >= 2) {
+			return `[${value.length}]`;
+		}
+		const items = value.slice(0, 6).map((item) => formatPreviewValue(item, true, depth + 1));
+		if (value.length > items.length) {
+			items.push("...");
+		}
+		return `[${items.join(", ")}]`;
 	}
 	if (isPlainObject(value)) {
-		return `{${Object.keys(value).length}}`;
+		if (!expandNested || depth >= 2) {
+			return `{${Object.keys(value).length}}`;
+		}
+		return `{ ${formatPreviewEntries(Object.entries(value), true, depth + 1)} }`;
 	}
 	if (value === null || value === undefined || value === "") {
 		return "empty";
@@ -218,11 +321,10 @@ function renderArray(
 	}
 
 	const addEl = parentEl.createDiv({ cls: "props-framework-add-property" });
-	const kindSelectEl = renderKindSelect(addEl);
 	const addButton = renderButton(addEl, "Add item", "lucide-plus");
 	addButton.addEventListener("click", (event) => {
 		stopMetadataEvent(event);
-		onChange([...value, createDefaultValue(kindSelectEl.value as NewValueKind)]);
+		onChange([...value, createDefaultValue("text")]);
 	});
 }
 
@@ -243,7 +345,11 @@ function renderEntry(
 	});
 	if (showKey) {
 		const keyEl = rowEl.createDiv({ cls: "props-framework-nested-key" });
+		renderKindButton(keyEl, value, onChange);
 		renderEditableKey(keyEl, key, onRename);
+	} else {
+		const typeEl = rowEl.createDiv({ cls: "props-framework-nested-array-type" });
+		renderKindButton(typeEl, value, onChange);
 	}
 
 	const valueEl = rowEl.createDiv({ cls: "props-framework-nested-value" });
@@ -254,6 +360,37 @@ function renderEntry(
 	deleteButton.addEventListener("click", (event) => {
 		stopMetadataEvent(event);
 		onDelete();
+	});
+}
+
+function renderKindButton(parentEl: HTMLElement, value: unknown, onChange: (value: unknown) => void): void {
+	const currentKind = getValueKind(value);
+	const currentType = NESTED_VALUE_KINDS.find((kind) => kind.value === currentKind) ?? NESTED_VALUE_KINDS[0]!;
+	const buttonEl = parentEl.createEl("button", {
+		attr: {
+			"aria-label": `Property type: ${currentType.label}`,
+			type: "button",
+		},
+		cls: "clickable-icon props-framework-nested-type-button",
+	});
+	setIcon(buttonEl, currentType.icon);
+	buttonEl.addEventListener("pointerdown", stopMetadataEvent);
+	buttonEl.addEventListener("mousedown", stopMetadataEvent);
+	buttonEl.addEventListener("click", (event) => {
+		stopMetadataEvent(event);
+		const menu = new Menu();
+		for (const kind of NESTED_VALUE_KINDS) {
+			menu.addItem((item) => item
+				.setTitle(kind.label)
+				.setIcon(kind.icon)
+				.setChecked(kind.value === currentKind)
+				.onClick(() => {
+					if (kind.value !== currentKind) {
+						onChange(createDefaultValue(kind.value));
+					}
+				}));
+		}
+		menu.showAtMouseEvent(event);
 	});
 }
 
@@ -341,14 +478,14 @@ function renderNestedValue(
 	onChange: (value: unknown) => void
 ): void {
 	if (Array.isArray(value)) {
-		renderCollapsible(parentEl, path, "[ ... ]", "lucide-list-tree", defaultCollapsed, collapsedPaths, (bodyEl) => {
+		renderCollapsible(parentEl, path, "[ ... ]", defaultCollapsed, collapsedPaths, (bodyEl) => {
 			renderArray(bodyEl, value, path, defaultCollapsed, collapsedPaths, onChange);
 		});
 		return;
 	}
 
 	if (isPlainObject(value)) {
-		renderCollapsible(parentEl, path, "{ ... }", "lucide-braces", defaultCollapsed, collapsedPaths, (bodyEl) => {
+		renderCollapsible(parentEl, path, "{ ... }", defaultCollapsed, collapsedPaths, (bodyEl) => {
 			renderObject(bodyEl, value, path, defaultCollapsed, collapsedPaths, onChange);
 		});
 		return;
@@ -375,7 +512,7 @@ function renderNestedValue(
 	}
 
 	const inputEl = parentEl.createEl("input", {
-		attr: { type: "text" },
+		attr: { placeholder: "Empty", type: "text" },
 		cls: "metadata-input-text",
 		value: stringifyScalar(value),
 	});
@@ -386,7 +523,6 @@ function renderCollapsible(
 	parentEl: HTMLElement,
 	path: string,
 	summary: string,
-	icon: string,
 	defaultCollapsed: boolean,
 	collapsedPaths: Set<string>,
 	renderBody: (bodyEl: HTMLElement) => void
@@ -397,7 +533,6 @@ function renderCollapsible(
 	});
 	const headerEl = wrapperEl.createDiv({ cls: "props-framework-nested-summary" });
 	const toggleButton = renderButton(headerEl, "Toggle nested value", "right-triangle", true);
-	setIcon(headerEl.createSpan({ cls: "props-framework-nested-type-icon" }), icon);
 	headerEl.createSpan({ text: summary });
 
 	const bodyEl = wrapperEl.createDiv({ cls: "props-framework-nested-body" });
@@ -423,60 +558,48 @@ function renderAddObjectProperty(
 	onChange: (value: JsonObject) => void
 ): void {
 	const addEl = parentEl.createDiv({ cls: "props-framework-add-property" });
-	const inputEl = addEl.createEl("input", {
-		attr: {
-			placeholder: "Property name",
-			type: "text",
-		},
-		cls: "metadata-input-text",
-	});
-	const kindSelectEl = renderKindSelect(addEl);
-	const buttonEl = renderButton(addEl, "Add", "lucide-plus");
-
-	const addProperty = (): void => {
-		const key = inputEl.value.trim();
-		if (!key || key in value) {
-			return;
-		}
-
-		onChange({
-			...value,
-			[key]: createDefaultValue(kindSelectEl.value as NewValueKind),
-		});
-	};
-
+	const buttonEl = renderButton(addEl, "Add property", "lucide-plus");
 	buttonEl.addEventListener("click", (event) => {
 		stopMetadataEvent(event);
-		addProperty();
-	});
-	inputEl.addEventListener("keydown", (event) => {
-		if (event.key === "Enter") {
-			stopMetadataEvent(event);
-			addProperty();
-		}
-	});
-}
-
-function renderKindSelect(parentEl: HTMLElement): HTMLSelectElement {
-	const selectEl = parentEl.createEl("select", { cls: "dropdown props-framework-kind-select" });
-	const options: Array<{ value: NewValueKind; label: string }> = [
-		{ value: "text", label: "Text" },
-		{ value: "number", label: "Number" },
-		{ value: "checkbox", label: "Checkbox" },
-		{ value: "object", label: "Object" },
-		{ value: "list", label: "List" },
-	];
-
-	for (const option of options) {
-		selectEl.createEl("option", {
-			attr: { value: option.value },
-			text: option.label,
+		buttonEl.hide();
+		const inputEl = addEl.createEl("input", {
+			attr: {
+				placeholder: "Property name",
+				type: "text",
+			},
+			cls: "props-framework-add-property-input",
 		});
-	}
+		let finished = false;
 
-	selectEl.addEventListener("pointerdown", (event) => event.stopPropagation());
-	selectEl.addEventListener("mousedown", (event) => event.stopPropagation());
-	return selectEl;
+		const finish = (commit: boolean): void => {
+			if (finished) {
+				return;
+			}
+			finished = true;
+			const key = inputEl.value.trim();
+			if (commit && key && !(key in value)) {
+				onChange({
+					...value,
+					[key]: createDefaultValue("text"),
+				});
+				return;
+			}
+			inputEl.remove();
+			buttonEl.show();
+		};
+
+		inputEl.addEventListener("blur", () => finish(true));
+		inputEl.addEventListener("keydown", (inputEvent) => {
+			if (inputEvent.key === "Enter" || inputEvent.key === "Tab") {
+				stopMetadataEvent(inputEvent);
+				finish(true);
+			} else if (inputEvent.key === "Escape") {
+				stopMetadataEvent(inputEvent);
+				finish(false);
+			}
+		});
+		inputEl.focus();
+	});
 }
 
 function renderButton(parentEl: HTMLElement, label: string, icon: string, iconOnly = false): HTMLButtonElement {
@@ -510,6 +633,22 @@ function createDefaultValue(kind: NewValueKind): unknown {
 		default:
 			return "";
 	}
+}
+
+function getValueKind(value: unknown): NewValueKind {
+	if (Array.isArray(value)) {
+		return "list";
+	}
+	if (isPlainObject(value)) {
+		return "object";
+	}
+	if (typeof value === "boolean") {
+		return "checkbox";
+	}
+	if (typeof value === "number") {
+		return "number";
+	}
+	return "text";
 }
 
 function isPlainObject(value: unknown): value is JsonObject {

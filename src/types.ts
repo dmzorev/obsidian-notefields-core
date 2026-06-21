@@ -45,6 +45,7 @@ export interface PropertyType<TConfig = unknown> {
 	validate?: (value: unknown, ctx: PropertyRenderContext<TConfig>) => PropertyValidationReturn;
 	normalize?: (value: unknown, ctx: PropertyRenderContext<TConfig>) => unknown;
 	render: (el: HTMLElement, ctx: PropertyRenderContext<TConfig>) => PropertyWidgetComponent;
+	renderBase?: (el: HTMLElement, ctx: PropertyRenderContext<TConfig>) => PropertyWidgetComponent;
 	renderSettings?: (el: HTMLElement, ctx: PropertySettingsContext<TConfig>) => void;
 }
 
@@ -71,6 +72,8 @@ export interface SelectPropertyConfig {
 
 export interface NestedPropertyConfig {
 	defaultCollapsed: boolean;
+	basesShowRootBraces: boolean;
+	basesExpandNestedValues: boolean;
 }
 
 export type BuiltInPropertyTypeId =

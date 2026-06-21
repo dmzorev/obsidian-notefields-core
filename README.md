@@ -73,7 +73,7 @@ Options can be configured manually, collected from existing notes, or combined f
 
 ### Edit nested objects
 
-Nested object fields support strings, numbers, checkboxes, objects, and lists. Objects and lists can be nested recursively. Click an object key to rename it, use **Enter** to save, or **Escape** to cancel.
+Nested object fields support strings, numbers, checkboxes, objects, and lists. Objects and lists can be nested recursively. Click an object key to rename it, use **Enter** to save, or **Escape** to cancel. Select the icon beside a key or list item to change its value type. New properties and list items use Text by default.
 
 In a Bases table, nested fields use a compact one-line preview. Select or focus the cell to open the full recursive editor.
 
@@ -160,7 +160,7 @@ this.register(() => handle?.dispose());
 }
 ```
 
-Custom field IDs should be namespaced with the owner plugin ID. Registered types may provide their own renderer, normalizer, validator, default configuration, icon, and settings UI.
+Custom field IDs should be namespaced with the owner plugin ID. Registered types may provide their own renderer, normalizer, validator, default configuration, icon, and settings UI. A type may also provide an optional `renderBase` renderer for Obsidian Bases; NoteFields falls back to `render` when it is omitted.
 
 ## Current limitations
 

@@ -18,6 +18,8 @@ export const DEFAULT_SELECT_CONFIG: SelectPropertyConfig = {
 
 export const DEFAULT_NESTED_CONFIG: NestedPropertyConfig = {
 	defaultCollapsed: false,
+	basesShowRootBraces: false,
+	basesExpandNestedValues: true,
 };
 
 export const DEFAULT_SETTINGS: NoteFieldsSettings = {
@@ -428,6 +430,36 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 						config: {
 							...definition.config,
 							defaultCollapsed,
+						},
+					});
+				}));
+
+		new Setting(sectionEl)
+			.setName("Show outer braces in bases")
+			.setDesc("Wrap the top-level object preview in braces.")
+			.addToggle((toggle) => toggle
+				.setValue(definition.config.basesShowRootBraces)
+				.onChange(async (basesShowRootBraces) => {
+					await this.plugin.api.setPropertyDefinition({
+						...definition,
+						config: {
+							...definition.config,
+							basesShowRootBraces,
+						},
+					});
+				}));
+
+		new Setting(sectionEl)
+			.setName("Expand nested values in bases")
+			.setDesc("Show compact nested content instead of only item counts.")
+			.addToggle((toggle) => toggle
+				.setValue(definition.config.basesExpandNestedValues)
+				.onChange(async (basesExpandNestedValues) => {
+					await this.plugin.api.setPropertyDefinition({
+						...definition,
+						config: {
+							...definition.config,
+							basesExpandNestedValues,
 						},
 					});
 				}));

@@ -226,7 +226,9 @@ export class ObsidianPropertyAdapter {
 				});
 
 				try {
-					return type.render(el, renderContext);
+					const isBase = Boolean(el.closest(".bases-view, .bases-table-cell, .bases-cards-line, .bases-list-property"));
+					const renderer = isBase ? type.renderBase ?? type.render : type.render;
+					return renderer(el, renderContext);
 				} catch (error) {
 					el.empty();
 					renderValidation(el, {
