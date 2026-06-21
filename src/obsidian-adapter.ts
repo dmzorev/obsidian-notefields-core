@@ -313,7 +313,12 @@ export class ObsidianPropertyAdapter {
 			cls: "props-framework-displayed-title",
 			text: title,
 		});
-		positionDisplayedTitle(keyInputEl, keyContainerEl, titleEl);
+		positionDisplayedTitle(
+			keyInputEl,
+			keyContainerEl,
+			titleEl,
+			iconEl instanceof HTMLElement ? iconEl : null
+		);
 	}
 
 	private patchPropertyMenu(): void {
@@ -533,7 +538,12 @@ function getPropertyName(propertyEl: HTMLElement): string | null {
 	return null;
 }
 
-function positionDisplayedTitle(inputEl: HTMLInputElement, containerEl: HTMLElement, titleEl: HTMLElement): void {
+function positionDisplayedTitle(
+	inputEl: HTMLInputElement,
+	containerEl: HTMLElement,
+	titleEl: HTMLElement,
+	iconEl: HTMLElement | null
+): void {
 	const update = (): void => {
 		const inputRect = inputEl.getBoundingClientRect();
 		const containerRect = containerEl.getBoundingClientRect();
@@ -541,10 +551,24 @@ function positionDisplayedTitle(inputEl: HTMLInputElement, containerEl: HTMLElem
 			return;
 		}
 
-		titleEl.style.left = `${inputRect.left - containerRect.left}px`;
+		const inputStyle = window.getComputedStyle(inputEl);
+		const paddingLeft = Number.parseFloat(inputStyle.paddingLeft) || 0;
+		const paddingRight = Number.parseFloat(inputStyle.paddingRight) || 0;
+		const iconRect = iconEl?.getBoundingClientRect();
+		const inputTextLeft = inputRect.left + paddingLeft;
+		const iconTextLeft = iconRect ? iconRect.right + 6 : inputTextLeft;
+		const textLeft = Math.max(inputTextLeft, iconTextLeft);
+		const textRight = inputRect.right - paddingRight;
+
+		titleEl.style.left = `${textLeft - containerRect.left}px`;
 		titleEl.style.top = `${inputRect.top - containerRect.top}px`;
-		titleEl.style.width = `${inputRect.width}px`;
+		titleEl.style.width = `${Math.max(0, textRight - textLeft)}px`;
 		titleEl.style.height = `${inputRect.height}px`;
+		titleEl.style.fontFamily = inputStyle.fontFamily;
+		titleEl.style.fontSize = inputStyle.fontSize;
+		titleEl.style.fontWeight = inputStyle.fontWeight;
+		titleEl.style.letterSpacing = inputStyle.letterSpacing;
+		titleEl.style.lineHeight = inputStyle.lineHeight;
 	};
 
 	update();
