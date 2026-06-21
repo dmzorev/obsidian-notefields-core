@@ -511,6 +511,7 @@ class PropertySettingsModal extends Modal {
 		type?.renderSettings?.(this.contentEl, {
 			app: this.plugin.app,
 			definition,
+			getDefinition: () => this.plugin.api.getPropertyDefinition(this.propertyName) ?? definition,
 			updateDefinition: async (nextDefinition) => {
 				await this.plugin.api.setPropertyDefinition(nextDefinition);
 			},

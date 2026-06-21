@@ -1,92 +1,98 @@
-import { Setting, setIcon, type App } from "obsidian";
-import { ColorPickerModal, IconPickerModal } from "../pickers";
-import type { PropertyOption, PropertyType, SelectPropertyConfig } from "../types";
+import { Notice, Setting, setIcon } from "obsidian";
 import {
-	coerceString,
-	coerceStringArray,
+	coerceOptionValue,
+	formatOptionValue,
+	isOptionValue,
+	optionMatchesQuery,
+	optionValuesEqual,
+	parseOptionInput,
+	uniqueValueOptions,
+} from "../options";
+import type {
+	OptionValue,
+	OptionValueType,
+	PropertySettingsContext,
+	PropertyType,
+	SelectPropertyConfig,
+	ValueOption,
+	ValueOptionsEditorContext,
+} from "../types";
+import {
 	containMetadataEvents,
 	renderOptionLabel,
 	renderValidation,
 	stopMetadataEvent,
-	uniqueOptions,
 } from "../ui";
 
-type OptionResolver = (propertyName: string) => PropertyOption[];
+type OptionResolver = (propertyName: string) => ValueOption[];
+type ValueTypeResolver = (propertyName: string) => OptionValueType;
+type CustomValueHandler = (propertyName: string, value: OptionValue) => void;
+type OptionsEditorRenderer = (el: HTMLElement, context: ValueOptionsEditorContext) => void;
 
-interface SelectSettingsContext {
-	app: App;
-	definition: { config: SelectPropertyConfig };
-	updateDefinition: (definition: { config: SelectPropertyConfig }) => Promise<void>;
-}
-
-export function createSelectType(resolveOptions: OptionResolver): PropertyType<SelectPropertyConfig> {
+export function createSelectType(
+	resolveOptions: OptionResolver,
+	rememberCustomValue: CustomValueHandler,
+	renderOptionsEditor: OptionsEditorRenderer,
+	resolveValueType: ValueTypeResolver
+): PropertyType<SelectPropertyConfig> {
 	return {
 		id: "notefields:select",
 		name: "Select",
-		description: "Single value selected from configured or collected options.",
+		description: "Single value selected from a local or shared option collection.",
 		icon: "lucide-list-check",
-		defaultConfig: {
-			options: [],
-			optionSource: "manual",
-			allowCustom: true,
-			placeholder: "",
-		},
+		defaultConfig: createDefaultConfig(),
+		optionSupport: createOptionSupport(),
 		validate(value, ctx) {
-			const text = coerceString(value);
-			if (!text || ctx.config.allowCustom) {
+			if (value === null || value === undefined || value === "") {
 				return true;
 			}
-
-			const options = resolveOptions(ctx.definition.property);
-			return options.some((option) => option.value === text)
+			if (!isOptionValue(value)) {
+				return "Expected a text, number or boolean value.";
+			}
+			const normalized = coerceOptionValue(value, resolveValueType(ctx.definition.property));
+			if (normalized === null) {
+				return `Expected a ${resolveValueType(ctx.definition.property)} value.`;
+			}
+			if (ctx.config.allowCustom) {
+				return true;
+			}
+			return resolveOptions(ctx.definition.property).some((option) => optionValuesEqual(option.value, normalized))
 				? true
-				: `Value "${text}" is not in the allowed options.`;
+				: `Value "${formatOptionValue(normalized)}" is not in the allowed options.`;
 		},
-		normalize(value) {
-			return coerceString(value);
+		normalize(value, ctx) {
+			if (value === null || value === undefined || value === "") {
+				return null;
+			}
+			return coerceOptionValue(value, resolveValueType(ctx.definition.property));
 		},
 		render(el, ctx) {
-			let value = coerceString(ctx.value);
+			let value = normalizeSingleValue(ctx.value, resolveValueType(ctx.definition.property));
 			let isOpen = false;
 			let isEditing = false;
 			let query = "";
 
 			const render = (): void => {
-				const options = uniqueOptions(resolveOptions(ctx.definition.property));
-				const selectedOption = options.find((option) => option.value === value) ?? (value ? { value } : null);
+				const options = uniqueValueOptions(resolveOptions(ctx.definition.property));
+				const selectedOption = value === null
+					? null
+					: options.find((option) => optionValuesEqual(option.value, value)) ?? { id: "current", value };
 				el.empty();
 
 				const wrapperEl = el.createDiv({
-					attr: {
-						"aria-label": "Edit selected value",
-						tabindex: isEditing ? "-1" : "0",
-					},
+					attr: { "aria-label": "Edit selected value", tabindex: isEditing ? "-1" : "0" },
 					cls: ["props-framework-select", isEditing ? "is-editing" : "is-viewing"],
 				});
 				containMetadataEvents(wrapperEl);
-				wrapperEl.addEventListener("focusout", () => {
-					window.setTimeout(() => {
-						if (!wrapperEl.isConnected || wrapperEl.contains(document.activeElement)) {
-							return;
-						}
-						query = "";
-						isOpen = false;
-						isEditing = false;
-						render();
-					}, 0);
-				});
-				wrapperEl.addEventListener("focus", () => openEditor());
-				wrapperEl.addEventListener("click", () => openEditor());
+				bindEditorFocus(wrapperEl, () => {
+					query = "";
+					isOpen = false;
+					isEditing = false;
+					render();
+				}, openEditor);
 
 				if (isEditing) {
-					const inputEl = wrapperEl.createEl("input", {
-						attr: {
-							placeholder: "Filter or add value",
-							type: "text",
-						},
-						cls: "props-framework-select-input",
-						value: query,
-					});
+					const inputEl = createEditorInput(wrapperEl, query, "Filter or add value");
 					inputEl.addEventListener("input", () => {
 						query = inputEl.value;
 						isOpen = true;
@@ -103,59 +109,61 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 						}
 						if (event.key === "Enter" && ctx.config.allowCustom && query.trim()) {
 							stopMetadataEvent(event);
-							selectValue(query.trim());
+							const nextValue = parseOptionInput(query, resolveValueType(ctx.definition.property));
+							if (nextValue === null) {
+								new Notice(`Expected a ${resolveValueType(ctx.definition.property)} value.`);
+								return;
+							}
+							selectValue(nextValue, true);
 						}
 					});
 					window.requestAnimationFrame(() => inputEl.focus());
 				} else {
 					const pillEl = wrapperEl.createDiv({
-						cls: ["props-framework-value-pill", value ? "" : "is-empty"],
+						cls: ["props-framework-value-pill", value === null ? "is-empty" : ""],
 					});
-					renderOptionPillContent(pillEl, selectedOption ?? { value: ctx.config.placeholder || "Select value" });
+					renderOptionPillContent(pillEl, selectedOption ?? {
+						id: "placeholder",
+						value: ctx.config.placeholder || "Select value",
+					});
 				}
 
 				if (isOpen) {
 					renderSuggestions(wrapperEl, getSuggestionConfig());
 				}
-
-				renderValidation(el, validateSelectValue(value, options.map((option) => option.value), ctx.config.allowCustom));
+				renderValidation(el, ctx.validate(value));
 
 				function getSuggestionConfig(): SuggestionConfig {
 					return {
-						allowCustom: ctx.config.allowCustom,
-						showInput: false,
 						options,
 						query,
-						selectedValues: value ? [value] : [],
-						onQueryChange: (nextQuery) => {
-							query = nextQuery;
-							render();
-						},
-						onSelect: selectValue,
+						selectedValues: value === null ? [] : [value],
+						onSelect: (nextValue) => selectValue(nextValue, false),
 					};
 				}
 
-				function selectValue(nextValue: string): void {
+				function selectValue(nextValue: OptionValue, isCustom: boolean): void {
 					value = nextValue;
 					isOpen = false;
 					isEditing = false;
 					query = "";
-					ctx.onChange(nextValue || null);
+					ctx.onChange(nextValue);
+					if (isCustom) {
+						rememberCustomValue(ctx.definition.property, nextValue);
+					}
 					render();
 				}
 
 				function openEditor(): void {
-					if (isEditing) {
-						return;
+					if (!isEditing) {
+						isEditing = true;
+						isOpen = true;
+						render();
 					}
-					isEditing = true;
-					isOpen = true;
-					render();
 				}
 			};
 
 			render();
-
 			return {
 				type: "notefields:select",
 				focus: () => {
@@ -165,120 +173,89 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 				},
 			};
 		},
-		renderSettings: renderSelectSettings,
+		renderSettings: (el, ctx) => renderSelectSettings(el, ctx, renderOptionsEditor),
 	};
 }
 
-export function createMultiselectType(resolveOptions: OptionResolver): PropertyType<SelectPropertyConfig> {
+export function createMultiselectType(
+	resolveOptions: OptionResolver,
+	rememberCustomValue: CustomValueHandler,
+	renderOptionsEditor: OptionsEditorRenderer,
+	resolveValueType: ValueTypeResolver
+): PropertyType<SelectPropertyConfig> {
 	return {
 		id: "notefields:multiselect",
 		name: "Multiselect",
-		description: "Multiple string values selected from configured or collected options.",
+		description: "Multiple values selected from a local or shared option collection.",
 		icon: "lucide-list-plus",
-		defaultConfig: {
-			options: [],
-			optionSource: "manual",
-			allowCustom: true,
-			placeholder: "",
-		},
+		defaultConfig: createDefaultConfig(),
+		optionSupport: createOptionSupport(),
 		validate(value, ctx) {
 			if (!Array.isArray(value)) {
-				return {
-					valid: false,
-					message: "Expected a list of values.",
-				};
+				return { valid: false, message: "Expected a list of values." };
 			}
-
+			const valueType = resolveValueType(ctx.definition.property);
+			const normalized = value.map((item) => coerceOptionValue(item, valueType));
+			if (normalized.some((item) => item === null)) {
+				return { valid: false, message: `Expected ${valueType} values.` };
+			}
 			if (ctx.config.allowCustom) {
 				return true;
 			}
-
 			const options = resolveOptions(ctx.definition.property);
-			const allowedValues = new Set(options.map((option) => option.value));
-			const unknownValues = value.filter((item) => typeof item === "string" && !allowedValues.has(item));
-			return unknownValues.length === 0
-				? true
-				: {
-					valid: false,
-					message: "Some values are not in the allowed options.",
-					details: unknownValues.map((item) => String(item)),
-				};
+			const unknown = normalized.filter((item): item is OptionValue => item !== null)
+				.filter((item) => !options.some((option) => optionValuesEqual(option.value, item)));
+			return unknown.length === 0 ? true : {
+				valid: false,
+				message: "Some values are not in the allowed options.",
+				details: unknown.map(formatOptionValue),
+			};
 		},
-		normalize(value) {
-			return coerceStringArray(value);
+		normalize(value, ctx) {
+			return normalizeMultipleValues(value, resolveValueType(ctx.definition.property));
 		},
 		render(el, ctx) {
-			let value = coerceStringArray(ctx.value);
+			let value = normalizeMultipleValues(ctx.value, resolveValueType(ctx.definition.property));
 			let query = "";
 			let isOpen = false;
 			let isEditing = false;
 
 			const render = (): void => {
-				const options = uniqueOptions(resolveOptions(ctx.definition.property));
+				const options = uniqueValueOptions(resolveOptions(ctx.definition.property));
 				el.empty();
-
 				const wrapperEl = el.createDiv({
-					attr: {
-						"aria-label": "Edit multiple values",
-						tabindex: isEditing ? "-1" : "0",
-					},
+					attr: { "aria-label": "Edit multiple values", tabindex: isEditing ? "-1" : "0" },
 					cls: ["props-framework-multiselect", isEditing ? "is-editing" : "is-viewing"],
 				});
 				containMetadataEvents(wrapperEl);
-				wrapperEl.addEventListener("focusout", () => {
-					window.setTimeout(() => {
-						if (!wrapperEl.isConnected || wrapperEl.contains(document.activeElement)) {
-							return;
-						}
-						query = "";
-						isOpen = false;
-						isEditing = false;
-						render();
-					}, 0);
-				});
-				wrapperEl.addEventListener("focus", () => openEditor());
-				wrapperEl.addEventListener("click", (event) => {
-					if (event.target instanceof Element && event.target.closest("button")) {
-						return;
-					}
-					openEditor();
-				});
+				bindEditorFocus(wrapperEl, () => {
+					query = "";
+					isOpen = false;
+					isEditing = false;
+					render();
+				}, openEditor, true);
 				const inlineEl = wrapperEl.createDiv({ cls: "props-framework-multiselect-inline" });
 
-				const updateValue = (nextValue: string[]): void => {
-					value = nextValue;
-					ctx.onChange(nextValue);
-					render();
-				};
-
 				for (const item of value) {
-					const option = options.find((candidate) => candidate.value === item) ?? { value: item };
+					const option = options.find((candidate) => optionValuesEqual(candidate.value, item)) ?? {
+						id: `current-${typeof item}-${String(item)}`,
+						value: item,
+					};
 					const pillEl = inlineEl.createDiv({ cls: "props-framework-value-pill" });
 					renderOptionPillContent(pillEl, option);
 					const removeButton = pillEl.createEl("button", {
-						attr: { "aria-label": `Remove ${item}`, type: "button" },
+						attr: { "aria-label": `Remove ${formatOptionValue(item)}`, type: "button" },
 						cls: "clickable-icon props-framework-pill-remove",
 					});
 					setIcon(removeButton, "lucide-x");
 					removeButton.addEventListener("click", (event) => {
 						stopMetadataEvent(event);
-						updateValue(value.filter((candidate) => candidate !== item));
+						updateValue(value.filter((candidate) => !optionValuesEqual(candidate, item)));
 					});
 				}
 
 				if (isEditing) {
-					const inputEl = inlineEl.createEl("input", {
-						attr: {
-							placeholder: "Add value",
-							type: "text",
-						},
-						cls: "props-framework-multiselect-input",
-						value: query,
-					});
-					inputEl.addEventListener("focus", () => {
-						isOpen = true;
-						renderSuggestions(wrapperEl, getSuggestionConfig());
-					});
+					const inputEl = createEditorInput(inlineEl, query, "Add value", "props-framework-multiselect-input");
 					inputEl.addEventListener("input", () => {
 						query = inputEl.value;
 						isOpen = true;
@@ -293,16 +270,16 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 							render();
 							return;
 						}
-						if (event.key !== "Enter") {
+						if (event.key !== "Enter" || !ctx.config.allowCustom || !query.trim()) {
 							return;
 						}
 						stopMetadataEvent(event);
-						const nextValue = query.trim();
-						if (ctx.config.allowCustom && nextValue && !value.includes(nextValue)) {
-							query = "";
-							isOpen = true;
-							updateValue([...value, nextValue]);
+						const nextValue = parseOptionInput(query, resolveValueType(ctx.definition.property));
+						if (nextValue === null) {
+							new Notice(`Expected a ${resolveValueType(ctx.definition.property)} value.`);
+							return;
 						}
+						addValue(nextValue, true);
 					});
 					window.requestAnimationFrame(() => inputEl.focus());
 				}
@@ -310,43 +287,37 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 				if (isOpen) {
 					renderSuggestions(wrapperEl, getSuggestionConfig());
 				}
-
 				renderValidation(el, ctx.validate(value));
 
 				function getSuggestionConfig(): SuggestionConfig {
-					return {
-						allowCustom: ctx.config.allowCustom,
-						showInput: false,
-						options,
-						query,
-						selectedValues: value,
-						onQueryChange: (nextQuery) => {
-							query = nextQuery;
-							render();
-						},
-						onSelect: (nextValue) => {
-							if (!nextValue || value.includes(nextValue)) {
-								return;
-							}
-							query = "";
-							isOpen = true;
-							updateValue([...value, nextValue]);
-						},
-					};
+					return { options, query, selectedValues: value, onSelect: (nextValue) => addValue(nextValue, false) };
 				}
-
-				function openEditor(): void {
-					if (isEditing) {
+				function addValue(nextValue: OptionValue, isCustom: boolean): void {
+					if (value.some((item) => optionValuesEqual(item, nextValue))) {
 						return;
 					}
-					isEditing = true;
+					query = "";
 					isOpen = true;
+					if (isCustom) {
+						rememberCustomValue(ctx.definition.property, nextValue);
+					}
+					updateValue([...value, nextValue]);
+				}
+				function updateValue(nextValue: OptionValue[]): void {
+					value = nextValue;
+					ctx.onChange(nextValue);
 					render();
+				}
+				function openEditor(): void {
+					if (!isEditing) {
+						isEditing = true;
+						isOpen = true;
+						render();
+					}
 				}
 			};
 
 			render();
-
 			return {
 				type: "notefields:multiselect",
 				focus: () => {
@@ -356,56 +327,24 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 				},
 			};
 		},
-		renderSettings: renderSelectSettings,
+		renderSettings: (el, ctx) => renderSelectSettings(el, ctx, renderOptionsEditor),
 	};
 }
 
 interface SuggestionConfig {
-	allowCustom: boolean;
-	showInput: boolean;
-	options: PropertyOption[];
+	options: ValueOption[];
 	query: string;
-	selectedValues: string[];
-	onQueryChange: (query: string) => void;
-	onSelect: (value: string) => void;
+	selectedValues: OptionValue[];
+	onSelect: (value: OptionValue) => void;
 }
 
 function renderSuggestions(parentEl: HTMLElement, config: SuggestionConfig): void {
 	parentEl.querySelector(".props-framework-suggestions")?.remove();
-	const query = config.query.trim().toLowerCase();
 	const options = config.options
-		.filter((option) => !config.selectedValues.includes(option.value))
-		.filter((option) => {
-			if (!query) {
-				return true;
-			}
-			return option.value.toLowerCase().includes(query) || option.label?.toLowerCase().includes(query);
-		});
-
+		.filter((option) => !config.selectedValues.some((value) => optionValuesEqual(value, option.value)))
+		.filter((option) => optionMatchesQuery(option, config.query));
 	const suggestionsEl = parentEl.createDiv({ cls: "props-framework-suggestions" });
 	suggestionsEl.addEventListener("mousedown", stopMetadataEvent);
-	if (config.showInput) {
-		const inputEl = suggestionsEl.createEl("input", {
-			attr: {
-				placeholder: "Filter or add value",
-				type: "text",
-			},
-			cls: "metadata-input-text props-framework-suggestion-input",
-			value: config.query,
-		});
-		inputEl.addEventListener("input", () => config.onQueryChange(inputEl.value));
-		inputEl.addEventListener("keydown", (event) => {
-			if (event.key !== "Enter") {
-				return;
-			}
-			stopMetadataEvent(event);
-			if (config.allowCustom) {
-				config.onSelect(inputEl.value.trim());
-			}
-		});
-		window.setTimeout(() => inputEl.focus(), 0);
-	}
-
 	const listEl = suggestionsEl.createDiv({ cls: "props-framework-suggestion-list" });
 	for (const option of options) {
 		const optionEl = listEl.createEl("button", {
@@ -420,7 +359,7 @@ function renderSuggestions(parentEl: HTMLElement, config: SuggestionConfig): voi
 	}
 }
 
-function renderOptionPillContent(parentEl: HTMLElement, option: PropertyOption): void {
+function renderOptionPillContent(parentEl: HTMLElement, option: ValueOption): void {
 	parentEl.empty();
 	parentEl.addClass("props-framework-value-pill");
 	parentEl.addClass("props-framework-value-pill-inner");
@@ -432,212 +371,118 @@ function renderOptionPillContent(parentEl: HTMLElement, option: PropertyOption):
 	renderOptionLabel(parentEl, option);
 }
 
-function toPillBackground(color: string): string {
-	if (/^#|rgb|hsl|var\(/u.test(color)) {
-		return color;
-	}
-	return `rgba(var(--color-${color}-rgb), 0.18)`;
-}
-
-function toPillTextColor(color: string): string {
-	if (/^#|rgb|hsl|var\(/u.test(color)) {
-		return "var(--text-normal)";
-	}
-	return `rgba(var(--color-${color}-rgb), 1)`;
-}
-
-function validateSelectValue(value: string, allowedValues: string[], allowCustom: boolean) {
-	if (!value || allowCustom || allowedValues.includes(value)) {
-		return { valid: true };
-	}
-
-	return {
-		valid: false,
-		message: `Value "${value}" is not in the allowed options.`,
-		severity: "error" as const,
-	};
-}
-
 function renderSelectSettings(
 	el: HTMLElement,
-	ctx: SelectSettingsContext
+	ctx: PropertySettingsContext<SelectPropertyConfig>,
+	renderOptionsEditor: OptionsEditorRenderer
 ): void {
-	const config = ctx.definition.config;
-
-	new Setting(el)
-		.setName("Options source")
-		.setDesc("Configured values, values collected from notes, or both.")
-		.addDropdown((dropdown) => dropdown
-			.addOption("manual", "Manual")
-			.addOption("vault", "Collect from notes")
-			.addOption("manual-and-vault", "Manual and notes")
-			.setValue(config.optionSource)
-			.onChange(async (optionSource) => {
-				await ctx.updateDefinition({
-					...ctx.definition,
-					config: {
-						...config,
-						optionSource: optionSource as SelectPropertyConfig["optionSource"],
-					},
-				});
-			}));
-
 	new Setting(el)
 		.setName("Allow custom values")
 		.addToggle((toggle) => toggle
-			.setValue(config.allowCustom)
+			.setValue(ctx.definition.config.allowCustom)
 			.onChange(async (allowCustom) => {
+				const definition = ctx.getDefinition?.() ?? ctx.definition;
 				await ctx.updateDefinition({
-					...ctx.definition,
-					config: {
-						...config,
-						allowCustom,
-					},
+					...definition,
+					config: { ...definition.config, allowCustom },
 				});
 			}));
 
-	renderInlineOptionEditor(el, ctx);
-}
+	new Setting(el)
+		.setName("Remember custom values")
+		.setDesc("Add values created in notes to the selected option set automatically.")
+		.addToggle((toggle) => toggle
+			.setValue(ctx.definition.config.autoAddCustomValues)
+			.onChange(async (autoAddCustomValues) => {
+				const definition = ctx.getDefinition?.() ?? ctx.definition;
+				await ctx.updateDefinition({
+					...definition,
+					config: { ...definition.config, autoAddCustomValues },
+				});
+			}));
 
-function renderInlineOptionEditor(
-	el: HTMLElement,
-	ctx: SelectSettingsContext
-): void {
-	const optionsEl = el.createDiv({ cls: "props-framework-option-editor" });
-	new Setting(optionsEl)
-		.setName("Values")
-		.setDesc("Edit possible values, display titles, icons and colors.")
-		.setHeading();
-
-	for (const [index, option] of ctx.definition.config.options.entries()) {
-		const rowEl = optionsEl.createDiv({ cls: "props-framework-option-editor-row" });
-		rowEl.createEl("input", {
-			attr: { "aria-label": "Value", placeholder: "Value", type: "text" },
-			cls: "metadata-input-text",
-			value: option.value,
-		}).addEventListener("change", (event) => {
-			const target = event.target;
-			if (target instanceof HTMLInputElement) {
-				void updateOptionAt(ctx, index, { value: target.value.trim() });
-			}
-		});
-		rowEl.createEl("input", {
-			attr: { "aria-label": "Title", placeholder: "Title", type: "text" },
-			cls: "metadata-input-text",
-			value: option.label ?? "",
-		}).addEventListener("change", (event) => {
-			const target = event.target;
-			if (target instanceof HTMLInputElement) {
-				void updateOptionAt(ctx, index, { label: target.value.trim() || undefined });
-			}
-		});
-
-		const iconButton = rowEl.createEl("button", {
-			attr: { "aria-label": "Choose icon", type: "button" },
-			cls: ["clickable-icon", "props-framework-icon-chip", option.icon ? "has-value" : "is-empty"],
-		});
-		setIcon(iconButton, option.icon || "lucide-plus");
-		iconButton.addEventListener("click", () => {
-			new IconPickerModal(ctx.app, option.icon ?? null, async (icon) => {
-				const nextDefinition = await updateOptionAt(ctx, index, { icon: icon ?? undefined });
-				el.empty();
-				renderSelectSettings(el, { ...ctx, definition: nextDefinition });
-			}).open();
-		});
-
-		const colorButton = rowEl.createEl("button", {
-			attr: { "aria-label": "Choose color", type: "button" },
-			cls: ["props-framework-color-chip", option.color ? "has-value" : "is-empty"],
-		});
-		colorButton.style.backgroundColor = option.color ? optionColorToCss(option.color) : "transparent";
-		colorButton.addEventListener("click", () => {
-			new ColorPickerModal(ctx.app, option.color ?? null, async (color) => {
-				const nextDefinition = await updateOptionAt(ctx, index, { color: color ?? undefined });
-				el.empty();
-				renderSelectSettings(el, { ...ctx, definition: nextDefinition });
-			}).open();
-		});
-
-		const deleteButton = rowEl.createEl("button", {
-			attr: { "aria-label": "Delete value", type: "button" },
-			cls: "clickable-icon",
-		});
-		setIcon(deleteButton, "lucide-trash-2");
-		deleteButton.addEventListener("click", () => {
-			const nextDefinition = {
+	renderOptionsEditor(el, {
+		binding: ctx.definition.config.optionBinding,
+		propertyName: ctx.definition.property,
+		onChange: async (optionBinding) => {
+			await ctx.updateDefinition({
 				...ctx.definition,
-				config: {
-					...ctx.definition.config,
-					options: ctx.definition.config.options.filter((_option, optionIndex) => optionIndex !== index),
-				},
-			};
-			void ctx.updateDefinition(nextDefinition).then(() => {
-				el.empty();
-				renderSelectSettings(el, { ...ctx, definition: nextDefinition });
+				config: { ...ctx.definition.config, optionBinding },
 			});
-		});
-	}
-
-	const addButton = optionsEl.createEl("button", {
-		attr: { type: "button" },
-		cls: "mod-cta props-framework-add-button",
-		text: "Add value",
-	});
-	addButton.addEventListener("click", () => {
-		const nextDefinition = {
-			...ctx.definition,
-			config: {
-				...ctx.definition.config,
-				options: [...ctx.definition.config.options, { value: getNextOptionValue(ctx.definition.config.options) }],
-			},
-		};
-		void ctx.updateDefinition(nextDefinition).then(() => {
-			el.empty();
-			renderSelectSettings(el, { ...ctx, definition: nextDefinition });
-		});
-	});
-}
-
-async function updateOptionAt(
-	ctx: SelectSettingsContext,
-	index: number,
-	patch: Partial<PropertyOption>
-): Promise<SelectSettingsContext["definition"]> {
-	const nextDefinition = {
-		...ctx.definition,
-		config: {
-			...ctx.definition.config,
-			options: ctx.definition.config.options.map((option, optionIndex) => {
-				if (optionIndex !== index) {
-					return option;
-				}
-
-				return {
-					...option,
-					...patch,
-				};
-			}),
 		},
+	});
+}
+
+function createDefaultConfig(): SelectPropertyConfig {
+	return {
+		optionBinding: { mode: "local", valueType: "string", options: [] },
+		allowCustom: true,
+		autoAddCustomValues: true,
+		placeholder: "",
 	};
-	await ctx.updateDefinition(nextDefinition);
-	return nextDefinition;
 }
 
-function getNextOptionValue(options: PropertyOption[]): string {
-	const values = new Set(options.map((option) => option.value));
-	const base = "new-value";
-	let value = base;
-	let index = 2;
-	while (values.has(value)) {
-		value = `${base}-${index}`;
-		index += 1;
-	}
-	return value;
+function createOptionSupport() {
+	return {
+		kind: "value" as const,
+		getBinding: (config: SelectPropertyConfig) => config.optionBinding,
+		setBinding: (config: SelectPropertyConfig, optionBinding: SelectPropertyConfig["optionBinding"]) => ({
+			...config,
+			optionBinding,
+		}),
+		allowLocal: true,
+		allowShared: true,
+	};
 }
 
-function optionColorToCss(color: string): string {
-	if (/^#|rgb|hsl|var\(/u.test(color)) {
-		return color;
+function normalizeSingleValue(value: unknown, valueType: OptionValueType): OptionValue | null {
+	if (value === null || value === undefined || value === "") {
+		return null;
 	}
-	return `rgba(var(--color-${color}-rgb), 1)`;
+	return coerceOptionValue(value, valueType);
+}
+
+function normalizeMultipleValues(value: unknown, valueType: OptionValueType): OptionValue[] {
+	const values = Array.isArray(value) ? value : [value];
+	return values.map((item) => coerceOptionValue(item, valueType))
+		.filter((item): item is OptionValue => item !== null);
+}
+
+function bindEditorFocus(
+	wrapperEl: HTMLElement,
+	onBlur: () => void,
+	onOpen: () => void,
+	ignoreButtons = false
+): void {
+	wrapperEl.addEventListener("focusout", () => {
+		window.setTimeout(() => {
+			if (!wrapperEl.isConnected || wrapperEl.contains(document.activeElement)) {
+				return;
+			}
+			onBlur();
+		}, 0);
+	});
+	wrapperEl.addEventListener("focus", onOpen);
+	wrapperEl.addEventListener("click", (event) => {
+		if (ignoreButtons && event.target instanceof Element && event.target.closest("button")) {
+			return;
+		}
+		onOpen();
+	});
+}
+
+function createEditorInput(parentEl: HTMLElement, value: string, placeholder: string, cls = "props-framework-select-input"): HTMLInputElement {
+	return parentEl.createEl("input", {
+		attr: { placeholder, type: "text" },
+		cls,
+		value,
+	});
+}
+
+function toPillBackground(color: string): string {
+	return /^#|rgb|hsl|var\(/u.test(color) ? color : `rgba(var(--color-${color}-rgb), 0.18)`;
+}
+
+function toPillTextColor(color: string): string {
+	return /^#|rgb|hsl|var\(/u.test(color) ? "var(--text-normal)" : `rgba(var(--color-${color}-rgb), 1)`;
 }

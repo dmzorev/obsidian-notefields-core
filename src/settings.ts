@@ -1,18 +1,19 @@
-import { App, PluginSettingTab, Setting, setIcon } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
-import { ColorPickerModal, IconPickerModal } from "./pickers";
+import { createLocalBinding, isOptionValue, normalizeValueOption, uniqueValueOptions } from "./options";
+import { renderValueOptionsEditor } from "./options-editor";
+import { IconPickerModal } from "./pickers";
 import type {
 	NoteFieldsSettings,
 	NestedPropertyConfig,
 	PropertyDefinition,
-	PropertyOption,
 	SelectPropertyConfig,
 } from "./types";
 
 export const DEFAULT_SELECT_CONFIG: SelectPropertyConfig = {
-	options: [],
-	optionSource: "manual",
+	optionBinding: createLocalBinding("string"),
 	allowCustom: true,
+	autoAddCustomValues: true,
 	placeholder: "",
 };
 
@@ -24,23 +25,17 @@ export const DEFAULT_NESTED_CONFIG: NestedPropertyConfig = {
 
 export const DEFAULT_SETTINGS: NoteFieldsSettings = {
 	properties: {},
-	dataVersion: 1,
+	valueOptionCollections: {},
+	dataVersion: 2,
 };
 
 export function normalizePropertyName(propertyName: string): string {
 	return propertyName.trim().toLowerCase();
 }
 
-function colorToCss(color: string): string {
-	if (/^#|rgb|hsl|var\(/u.test(color)) {
-		return color;
-	}
-	return `rgba(var(--color-${color}-rgb), 1)`;
-}
-
 export function getDefaultConfig(typeId: string): SelectPropertyConfig | NestedPropertyConfig | Record<string, never> {
 	if (typeId === "notefields:select" || typeId === "notefields:multiselect") {
-		return { ...DEFAULT_SELECT_CONFIG, options: [] };
+		return { ...DEFAULT_SELECT_CONFIG, optionBinding: createLocalBinding("string") };
 	}
 
 	if (typeId === "notefields:nested") {
@@ -52,15 +47,44 @@ export function getDefaultConfig(typeId: string): SelectPropertyConfig | NestedP
 
 export function normalizeDefinition(definition: PropertyDefinition): PropertyDefinition {
 	const typeId = migrateTypeId(definition.typeId);
+	const config = {
+		...getDefaultConfig(typeId),
+		...(definition.config as Record<string, unknown>),
+	} as Record<string, unknown>;
+	if ((typeId === "notefields:select" || typeId === "notefields:multiselect") && !config.optionBinding) {
+		const legacyOptions = Array.isArray(config.options)
+			? (config.options as unknown[]).filter(isStoredValueOption).map((option) => normalizeValueOption(option))
+			: [];
+		config.optionBinding = {
+			...createLocalBinding("string"),
+			options: legacyOptions,
+		};
+	}
+	if ((typeId === "notefields:select" || typeId === "notefields:multiselect") && config.optionBinding) {
+		const binding = config.optionBinding as SelectPropertyConfig["optionBinding"];
+		if (binding.mode === "local") {
+			config.optionBinding = {
+				...binding,
+				valueType: binding.valueType ?? "string",
+				options: uniqueValueOptions((binding.options ?? [])
+					.filter((option) => isOptionValue(option.value))
+					.map((option) => normalizeValueOption(option))),
+			};
+		}
+		delete config.options;
+		delete config.optionSource;
+	}
 	return {
 		...definition,
 		property: definition.property.trim(),
 		typeId,
-		config: {
-			...getDefaultConfig(typeId),
-			...(definition.config as Record<string, unknown>),
-		},
+		config,
 	};
+}
+
+function isStoredValueOption(option: unknown): option is { value: string | number | boolean } {
+	return Boolean(option && typeof option === "object" && "value" in option
+		&& isOptionValue((option as { value?: unknown }).value));
 }
 
 export class NoteFieldsSettingTab extends PluginSettingTab {
@@ -75,6 +99,13 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass("props-framework-settings");
+
+		new Setting(containerEl)
+			.setName("Option collections")
+			.setDesc("Create reusable value sets for select, multiselect and third-party field types.")
+			.setHeading();
+
+		this.renderValueCollections(containerEl);
 
 		new Setting(containerEl)
 			.setName("Managed properties")
@@ -96,6 +127,71 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 
 		for (const definition of definitions) {
 			this.renderDefinition(containerEl, definition);
+		}
+	}
+
+	private renderValueCollections(containerEl: HTMLElement): void {
+		let collectionName = "";
+		new Setting(containerEl)
+			.setName("New collection")
+			.setDesc("Collections can be shared by any number of properties and plugins.")
+			.addText((text) => text
+				.setPlaceholder("Statuses")
+				.onChange((value) => {
+					collectionName = value;
+				}))
+			.addButton((button) => button
+				.setButtonText("Create")
+				.setCta()
+				.onClick(async () => {
+					const name = collectionName.trim();
+					if (!name) {
+						return;
+					}
+					await this.plugin.api.createValueOptionCollection({ name });
+					this.display();
+				}));
+
+		for (const collection of this.plugin.api.getValueOptionCollections()) {
+			const sectionEl = containerEl.createDiv({
+				cls: ["props-framework-definition", "props-framework-collection"],
+			});
+			new Setting(sectionEl)
+				.setName(collection.name)
+				.setDesc(`${collection.options.length} value${collection.options.length === 1 ? "" : "s"}`)
+				.setHeading();
+
+			new Setting(sectionEl)
+				.setName("Collection name")
+				.addText((text) => text
+					.setValue(collection.name)
+					.setDisabled(Boolean(collection.readonly))
+					.onChange(async (name) => {
+						const normalized = name.trim();
+						if (normalized && normalized !== collection.name) {
+							await this.plugin.api.updateValueOptionCollection({ ...collection, name: normalized });
+						}
+					}));
+
+			renderValueOptionsEditor(this.plugin, sectionEl, {
+				binding: { mode: "shared", collectionId: collection.id },
+				onChange: async () => undefined,
+			}, { showBinding: false, showCollect: false });
+
+			if (!collection.readonly) {
+				new Setting(sectionEl)
+					.addButton((button) => button
+						.setButtonText("Remove collection")
+						.setWarning()
+						.onClick(async () => {
+							const removed = await this.plugin.api.removeValueOptionCollection(collection.id);
+							if (!removed) {
+								new Notice("This collection is still used by one or more properties.");
+								return;
+							}
+							this.display();
+						}));
+			}
 		}
 	}
 
@@ -176,13 +272,15 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 			this.display();
 		}, "Icon");
 
-		if (definition.typeId === "notefields:select" || definition.typeId === "notefields:multiselect") {
-			this.renderSelectConfig(sectionEl, definition as PropertyDefinition<SelectPropertyConfig>);
-		}
-
-		if (definition.typeId === "notefields:nested") {
-			this.renderNestedConfig(sectionEl, definition as PropertyDefinition<NestedPropertyConfig>);
-		}
+		const type = this.plugin.api.getRegisteredType(definition.typeId);
+		type?.renderSettings?.(sectionEl, {
+			app: this.app,
+			definition,
+			getDefinition: () => this.plugin.api.getPropertyDefinition(definition.property) ?? definition,
+			updateDefinition: async (nextDefinition) => {
+				await this.plugin.api.setPropertyDefinition(nextDefinition);
+			},
+		});
 
 		new Setting(sectionEl)
 			.addButton((button) => button
@@ -218,154 +316,6 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 			});
 	}
 
-	private renderSelectConfig(sectionEl: HTMLElement, definition: PropertyDefinition<SelectPropertyConfig>): void {
-		const config = definition.config;
-
-		new Setting(sectionEl)
-			.setName("Options source")
-			.setDesc("Configured values, values collected from notes, or both.")
-			.addDropdown((dropdown) => dropdown
-				.addOption("manual", "Manual")
-				.addOption("vault", "Collect from notes")
-				.addOption("manual-and-vault", "Manual and notes")
-				.setValue(config.optionSource)
-				.onChange(async (optionSource) => {
-					await this.plugin.api.setPropertyDefinition({
-						...definition,
-						config: {
-							...config,
-							optionSource: optionSource as SelectPropertyConfig["optionSource"],
-						},
-					});
-					this.display();
-				}));
-
-		new Setting(sectionEl)
-			.setName("Allow custom values")
-			.addToggle((toggle) => toggle
-				.setValue(config.allowCustom)
-				.onChange(async (allowCustom) => {
-					await this.plugin.api.setPropertyDefinition({
-						...definition,
-						config: {
-							...config,
-							allowCustom,
-						},
-					});
-				}));
-
-		this.renderOptionEditor(sectionEl, definition);
-	}
-
-	private renderOptionEditor(sectionEl: HTMLElement, definition: PropertyDefinition<SelectPropertyConfig>): void {
-		const optionsEl = sectionEl.createDiv({ cls: "props-framework-option-editor" });
-		new Setting(optionsEl)
-			.setName("Values")
-			.setDesc("Edit possible values, display titles, icons and colors.")
-			.setHeading();
-
-		for (const [index, option] of definition.config.options.entries()) {
-			const rowEl = optionsEl.createDiv({ cls: "props-framework-option-editor-row" });
-			rowEl.createEl("input", {
-				attr: { "aria-label": "Value", placeholder: "Value", type: "text" },
-				cls: "metadata-input-text",
-				value: option.value,
-			}).addEventListener("change", (event) => {
-				const target = event.target;
-				if (target instanceof HTMLInputElement) {
-					void this.updateOptionAt(definition, index, { value: target.value.trim() })
-						.then(() => this.display());
-				}
-			});
-			rowEl.createEl("input", {
-				attr: { "aria-label": "Title", placeholder: "Title", type: "text" },
-				cls: "metadata-input-text",
-				value: option.label ?? "",
-			}).addEventListener("change", (event) => {
-				const target = event.target;
-				if (target instanceof HTMLInputElement) {
-					void this.updateOptionAt(definition, index, { label: target.value.trim() || undefined })
-						.then(() => this.display());
-				}
-			});
-
-			this.renderCompactIconButton(rowEl, option.icon ?? "", async (icon) => {
-				await this.updateOptionAt(definition, index, { icon: icon || undefined });
-				this.display();
-			});
-			this.renderCompactColorButton(rowEl, option.color ?? "", async (color) => {
-				await this.updateOptionAt(definition, index, { color: color || undefined });
-				this.display();
-			});
-
-			const deleteButton = rowEl.createEl("button", {
-				attr: { "aria-label": "Delete value", type: "button" },
-				cls: "clickable-icon",
-			});
-			setIcon(deleteButton, "lucide-trash-2");
-			deleteButton.addEventListener("click", () => {
-				void this.plugin.api.setPropertyDefinition({
-					...definition,
-					config: {
-						...definition.config,
-						options: definition.config.options.filter((_option, optionIndex) => optionIndex !== index),
-					},
-				}).then(() => this.display());
-			});
-		}
-
-		const addButton = optionsEl.createEl("button", {
-			attr: { type: "button" },
-			cls: "mod-cta props-framework-add-button",
-			text: "Add value",
-		});
-		addButton.addEventListener("click", () => {
-			const value = this.getNextOptionValue(definition);
-			void this.plugin.api.setPropertyDefinition({
-				...definition,
-				config: {
-					...definition.config,
-					options: [...definition.config.options, { value }],
-				},
-			}).then(() => this.display());
-		});
-	}
-
-	private getNextOptionValue(definition: PropertyDefinition<SelectPropertyConfig>): string {
-		const values = new Set(definition.config.options.map((option) => option.value));
-		const base = "new-value";
-		let value = base;
-		let index = 2;
-		while (values.has(value)) {
-			value = `${base}-${index}`;
-			index += 1;
-		}
-		return value;
-	}
-
-	private async updateOptionAt(
-		definition: PropertyDefinition<SelectPropertyConfig>,
-		index: number,
-		patch: Partial<PropertyOption>
-	): Promise<void> {
-		await this.plugin.api.setPropertyDefinition({
-			...definition,
-			config: {
-				...definition.config,
-				options: definition.config.options.map((option, optionIndex) => {
-					if (optionIndex !== index) {
-						return option;
-					}
-
-					return {
-						...option,
-						...patch,
-					};
-				}),
-			},
-		});
-	}
-
 	private renderIconInput(
 		parentEl: HTMLElement,
 		value: string,
@@ -393,77 +343,6 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 				}));
 	}
 
-	private renderCompactIconButton(parentEl: HTMLElement, value: string, onChange: (icon: string) => Promise<void>): void {
-		const button = parentEl.createEl("button", {
-			attr: { "aria-label": "Choose icon", type: "button" },
-			cls: ["clickable-icon", "props-framework-icon-chip", value ? "has-value" : "is-empty"],
-		});
-		setIcon(button, value || "lucide-plus");
-		button.addEventListener("click", () => {
-			new IconPickerModal(this.app, value || null, async (icon) => {
-				await onChange(icon ?? "");
-			}).open();
-		});
-	}
-
-	private renderCompactColorButton(parentEl: HTMLElement, value: string, onChange: (color: string) => Promise<void>): void {
-		const button = parentEl.createEl("button", {
-			attr: { "aria-label": "Choose color", type: "button" },
-			cls: ["props-framework-color-chip", value ? "has-value" : "is-empty"],
-		});
-		button.style.backgroundColor = value ? colorToCss(value) : "transparent";
-		button.addEventListener("click", () => {
-			new ColorPickerModal(this.app, value || null, async (color) => {
-				await onChange(color ?? "");
-			}).open();
-		});
-	}
-
-	private renderNestedConfig(sectionEl: HTMLElement, definition: PropertyDefinition<NestedPropertyConfig>): void {
-		new Setting(sectionEl)
-			.setName("Collapsed by default")
-			.addToggle((toggle) => toggle
-				.setValue(definition.config.defaultCollapsed)
-				.onChange(async (defaultCollapsed) => {
-					await this.plugin.api.setPropertyDefinition({
-						...definition,
-						config: {
-							...definition.config,
-							defaultCollapsed,
-						},
-					});
-				}));
-
-		new Setting(sectionEl)
-			.setName("Show outer braces in bases")
-			.setDesc("Wrap the top-level object preview in braces.")
-			.addToggle((toggle) => toggle
-				.setValue(definition.config.basesShowRootBraces)
-				.onChange(async (basesShowRootBraces) => {
-					await this.plugin.api.setPropertyDefinition({
-						...definition,
-						config: {
-							...definition.config,
-							basesShowRootBraces,
-						},
-					});
-				}));
-
-		new Setting(sectionEl)
-			.setName("Expand nested values in bases")
-			.setDesc("Show compact nested content instead of only item counts.")
-			.addToggle((toggle) => toggle
-				.setValue(definition.config.basesExpandNestedValues)
-				.onChange(async (basesExpandNestedValues) => {
-					await this.plugin.api.setPropertyDefinition({
-						...definition,
-						config: {
-							...definition.config,
-							basesExpandNestedValues,
-						},
-					});
-				}));
-	}
 }
 
 function migrateTypeId(typeId: string): string {

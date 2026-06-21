@@ -12,6 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Optional `renderBase` API for field types that need a dedicated Obsidian Bases presentation.
 - Nested preview settings for outer braces and expanded nested values.
 - Property type menus on nested keys and list items.
+- Reusable Value Option collections for Select, Multiselect, and third-party field types.
+- Text, number, boolean, and mixed YAML value types for option sets.
+- Search aliases and serializable custom metadata on individual options.
+- Public APIs for collection management, option resolution, and the standard options editor.
+- Automatic collection updates for custom values created while editing notes.
+- On-demand collection of existing property values from notes.
+- Automatic frontmatter updates when an option value changes.
+- Wikilink updates in stored options when their target note is renamed.
 
 ### Fixed
 

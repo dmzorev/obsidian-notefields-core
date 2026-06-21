@@ -1,15 +1,23 @@
 import type { App, TFile } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
+import { createOptionId, normalizeValueOption, optionValuesEqual, uniqueValueOptions } from "./options";
+import { renderValueOptionsEditor } from "./options-editor";
 import { normalizeDefinition, normalizePropertyName } from "./settings";
 import type {
 	PropertyDefinition,
-	PropertyOption,
+	CreateValueOptionCollectionInput,
+	OptionValue,
 	PropertyRenderContext,
 	PropertyType,
 	PropertyTypeHandle,
 	PropertyTypeId,
 	PropertyTypeRegistration,
 	NoteFieldsApi,
+	ValueOption,
+	ValueOptionBinding,
+	ValueOptionCollection,
+	ValueOptionInput,
+	ValueOptionsEditorContext,
 } from "./types";
 import { normalizeValidationResult, type PropertyValidationResult } from "./types";
 
@@ -64,6 +72,22 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 		const key = normalizePropertyName(normalized.property);
 		if (!key) {
 			return;
+		}
+
+		const previous = this.plugin.settings.properties[key];
+		if (previous) {
+			const type = this.registry.get(previous.typeId);
+			const nextType = this.registry.get(normalized.typeId);
+			if (type?.optionSupport?.kind === "value" && nextType?.optionSupport?.kind === "value") {
+				const previousBinding = type.optionSupport.getBinding(previous.config);
+				const nextBinding = nextType.optionSupport.getBinding(normalized.config);
+				if (previousBinding.mode === "local" && nextBinding.mode === "local") {
+					await this.plugin.valueOptions.replacePropertyValues(
+						[normalized.property],
+						getOptionReplacements(previousBinding.options, nextBinding.options)
+					);
+				}
+			}
 		}
 
 		this.plugin.settings.properties[key] = normalized;
@@ -124,8 +148,97 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 		return normalizeValidationResult(type.validate(value, this.createRenderContext(definition, value)));
 	}
 
-	getOptions(propertyName: string, sourceFile?: TFile | null): PropertyOption[] {
+	getOptions(propertyName: string, sourceFile?: TFile | null): ValueOption[] {
 		return this.plugin.collectOptions(propertyName, sourceFile);
+	}
+
+	createValueOption(input: ValueOptionInput): ValueOption {
+		return normalizeValueOption(input);
+	}
+
+	getValueOptionCollections(): ValueOptionCollection[] {
+		return Object.values(this.plugin.settings.valueOptionCollections)
+			.map((collection) => cloneCollection(collection))
+			.sort((left, right) => left.name.localeCompare(right.name));
+	}
+
+	getValueOptionCollection(collectionId: string): ValueOptionCollection | null {
+		const collection = this.plugin.settings.valueOptionCollections[collectionId];
+		return collection ? cloneCollection(collection) : null;
+	}
+
+	async createValueOptionCollection(input: CreateValueOptionCollectionInput): Promise<ValueOptionCollection> {
+		const collection: ValueOptionCollection = {
+			id: createOptionId("collection"),
+			name: input.name.trim() || "Untitled collection",
+			kind: "value",
+			valueType: input.valueType ?? "string",
+			options: uniqueValueOptions((input.options ?? []).map((option) => normalizeValueOption(option))),
+			ownerPluginId: input.ownerPluginId,
+			readonly: input.readonly,
+			schemaVersion: 1,
+		};
+		this.plugin.settings.valueOptionCollections[collection.id] = collection;
+		await this.plugin.saveSettings();
+		this.refresh();
+		return cloneCollection(collection);
+	}
+
+	async updateValueOptionCollection(collection: ValueOptionCollection): Promise<void> {
+		const previous = this.plugin.settings.valueOptionCollections[collection.id];
+		if (!previous || previous.readonly) {
+			return;
+		}
+		const normalized: ValueOptionCollection = {
+			...collection,
+			name: collection.name.trim() || previous.name,
+			kind: "value",
+			options: uniqueValueOptions(collection.options.map((option) => normalizeValueOption(option))),
+			schemaVersion: 1,
+		};
+		await this.plugin.valueOptions.replacePropertyValues(
+			this.plugin.valueOptions.getPropertiesUsingCollection(collection.id),
+			getOptionReplacements(previous.options, normalized.options)
+		);
+		this.plugin.settings.valueOptionCollections[collection.id] = normalized;
+		await this.plugin.saveSettings();
+		this.refresh();
+	}
+
+	async removeValueOptionCollection(collectionId: string): Promise<boolean> {
+		const collection = this.plugin.settings.valueOptionCollections[collectionId];
+		if (!collection || collection.readonly || this.plugin.valueOptions.getPropertiesUsingCollection(collectionId).length) {
+			return false;
+		}
+		delete this.plugin.settings.valueOptionCollections[collectionId];
+		await this.plugin.saveSettings();
+		this.refresh();
+		return true;
+	}
+
+	resolveValueOptions(binding: ValueOptionBinding): ValueOption[] {
+		return this.plugin.valueOptions.resolve(binding).map((option) => ({ ...option }));
+	}
+
+	renderValueOptionsEditor(el: HTMLElement, context: ValueOptionsEditorContext): void {
+		const managedContext: ValueOptionsEditorContext = context.propertyName
+			? {
+				...context,
+				onChange: async (binding) => {
+					const definition = this.getPropertyDefinition(context.propertyName ?? "");
+					const type = definition ? this.registry.get(definition.typeId) : null;
+					if (!definition || type?.optionSupport?.kind !== "value") {
+						await context.onChange(binding);
+						return;
+					}
+					await this.setPropertyDefinition({
+						...definition,
+						config: type.optionSupport.setBinding(definition.config, binding),
+					});
+				},
+			}
+			: context;
+		renderValueOptionsEditor(this.plugin, el, managedContext);
 	}
 
 	refresh(): void {
@@ -157,6 +270,32 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 			...base,
 		};
 	}
+}
+
+function getOptionReplacements(previous: ValueOption[], next: ValueOption[]): Map<string, { from: OptionValue; to: OptionValue }> {
+	const nextById = new Map(next.map((option) => [option.id, option]));
+	const replacements = new Map<string, { from: OptionValue; to: OptionValue }>();
+	for (const option of previous) {
+		const nextOption = nextById.get(option.id);
+		if (nextOption && !optionValuesEqual(option.value, nextOption.value)) {
+			replacements.set(`${typeof option.value}:${String(option.value)}`, {
+				from: option.value,
+				to: nextOption.value,
+			});
+		}
+	}
+	return replacements;
+}
+
+function cloneCollection(collection: ValueOptionCollection): ValueOptionCollection {
+	return {
+		...collection,
+		options: collection.options.map((option) => ({
+			...option,
+			aliases: option.aliases ? [...option.aliases] : undefined,
+			meta: option.meta ? { ...option.meta } : undefined,
+		})),
+	};
 }
 
 export function getNoteFieldsApi(app: App): NoteFieldsApi | null {

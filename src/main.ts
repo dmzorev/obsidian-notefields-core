@@ -10,12 +10,14 @@ import {
 	normalizeDefinition,
 	normalizePropertyName,
 } from "./settings";
+import { ValueOptionsService } from "./value-options";
 import type {
 	NoteFieldsSettings,
+	OptionValue,
+	OptionValueType,
 	PropertyDefinition,
-	PropertyOption,
 	NoteFieldsApi,
-	SelectPropertyConfig,
+	ValueOption,
 } from "./types";
 
 declare module "obsidian" {
@@ -28,6 +30,7 @@ export default class NoteFieldsCorePlugin extends Plugin {
 	settings: NoteFieldsSettings;
 	api: NoteFieldsCoreApi;
 	adapter: ObsidianPropertyAdapter | null = null;
+	readonly valueOptions = new ValueOptionsService(this);
 
 	private readonly registry = new PropertyTypeRegistry();
 
@@ -46,6 +49,11 @@ export default class NoteFieldsCorePlugin extends Plugin {
 			name: "Refresh managed properties",
 			callback: () => this.adapter?.reloadAllProperties(),
 		});
+		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+			if (file instanceof TFile && file.extension === "md") {
+				void this.valueOptions.updateStoredWikilinks(oldPath, file.path);
+			}
+		}));
 	}
 
 	onunload(): void {
@@ -56,10 +64,12 @@ export default class NoteFieldsCorePlugin extends Plugin {
 	async loadSettings(): Promise<void> {
 		const data = ((await this.loadData()) ?? {}) as Partial<NoteFieldsSettings>;
 		const properties = data.properties ?? {};
+		const collections = data.valueOptionCollections ?? {};
 
 		this.settings = {
 			...DEFAULT_SETTINGS,
 			...data,
+			dataVersion: 2,
 			properties: Object.fromEntries(
 				Object.entries(properties)
 					.map(([key, definition]) => {
@@ -70,6 +80,12 @@ export default class NoteFieldsCorePlugin extends Plugin {
 						return [normalizePropertyName(normalized.property), normalized];
 					})
 			),
+			valueOptionCollections: Object.fromEntries(
+				Object.entries(collections).map(([key, collection]) => {
+					const normalized = this.valueOptions.normalizeCollection({ ...collection, id: collection.id || key });
+					return [normalized.id, normalized];
+				})
+			),
 		};
 	}
 
@@ -77,32 +93,10 @@ export default class NoteFieldsCorePlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	collectOptions(propertyName: string, sourceFile?: TFile | null): PropertyOption[] {
+	collectOptions(propertyName: string, sourceFile?: TFile | null): ValueOption[] {
 		void sourceFile;
-		const definition = this.api.getPropertyDefinition(propertyName);
-		if (!definition || (definition.typeId !== "notefields:select" && definition.typeId !== "notefields:multiselect")) {
-			return [];
-		}
-
-		const config = definition.config as SelectPropertyConfig;
-		const options: PropertyOption[] = [];
-
-		if (config.optionSource === "manual" || config.optionSource === "manual-and-vault") {
-			options.push(...config.options);
-		}
-
-		if (config.optionSource === "vault" || config.optionSource === "manual-and-vault") {
-			options.push(...this.collectVaultOptions(definition.property));
-		}
-
-		const seen = new Set<string>();
-		return options.filter((option) => {
-			if (!option.value || seen.has(option.value)) {
-				return false;
-			}
-			seen.add(option.value);
-			return true;
-		});
+		const binding = this.valueOptions.getPropertyBinding(propertyName);
+		return binding ? this.valueOptions.resolve(binding) : [];
 	}
 
 	ensurePropertyDefinition(propertyName: string, typeId: string): PropertyDefinition {
@@ -142,14 +136,22 @@ export default class NoteFieldsCorePlugin extends Plugin {
 	}
 
 	private registerBuiltInTypes(): void {
-		const resolveOptions = (propertyName: string): PropertyOption[] => this.collectOptions(propertyName);
+		const resolveOptions = (propertyName: string): ValueOption[] => this.collectOptions(propertyName);
+		const rememberCustomValue = (propertyName: string, value: OptionValue): void => {
+			void this.valueOptions.rememberCustomValue(propertyName, value);
+		};
+		const renderOptionsEditor = this.api.renderValueOptionsEditor.bind(this.api);
+		const resolveValueType = (propertyName: string): OptionValueType => {
+			const binding = this.valueOptions.getPropertyBinding(propertyName);
+			return binding ? this.valueOptions.getValueType(binding) : "string";
+		};
 
 		this.registry.register({
-			...createSelectType(resolveOptions),
+			...createSelectType(resolveOptions, rememberCustomValue, renderOptionsEditor, resolveValueType),
 			ownerPluginId: this.manifest.id,
 		});
 		this.registry.register({
-			...createMultiselectType(resolveOptions),
+			...createMultiselectType(resolveOptions, rememberCustomValue, renderOptionsEditor, resolveValueType),
 			ownerPluginId: this.manifest.id,
 		});
 		this.registry.register({
@@ -158,34 +160,6 @@ export default class NoteFieldsCorePlugin extends Plugin {
 		});
 	}
 
-	private collectVaultOptions(propertyName: string): PropertyOption[] {
-		const values = new Set<string>();
-
-		for (const file of this.app.vault.getMarkdownFiles()) {
-			const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
-			if (!frontmatter) {
-				continue;
-			}
-
-			const value = frontmatter[propertyName];
-			if (Array.isArray(value)) {
-				for (const item of value) {
-					if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
-						values.add(String(item));
-					}
-				}
-				continue;
-			}
-
-			if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-				values.add(String(value));
-			}
-		}
-
-		return Array.from(values)
-			.sort((a, b) => a.localeCompare(b))
-			.map((value) => ({ value }));
-	}
 }
 
 function cloneConfig<T>(config: T): T {

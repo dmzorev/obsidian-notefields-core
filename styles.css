@@ -21,16 +21,46 @@
 }
 
 .props-framework-option-editor-row {
-	display: grid;
-	grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) auto auto auto;
-	align-items: center;
-	gap: 8px;
 	padding: 4px 0;
 }
 
-.props-framework-option-editor-row .setting-item {
+.props-framework-option-editor-main {
+	display: grid;
+	grid-template-columns: minmax(90px, 0.8fr) minmax(90px, 1fr) minmax(90px, 1fr) auto auto auto;
+	align-items: center;
+	gap: 8px;
+}
+
+.props-framework-option-editor-main.is-multi-type {
+	grid-template-columns: auto minmax(90px, 0.8fr) minmax(90px, 1fr) minmax(90px, 1fr) auto auto auto;
+}
+
+.props-framework-option-editor-main .setting-item {
 	border: none;
 	padding: 0;
+}
+
+.props-framework-option-editor-main .setting-item-info {
+	display: none;
+}
+
+.props-framework-option-editor-main .setting-item-control {
+	width: auto;
+}
+
+@media (max-width: 700px) {
+	.props-framework-option-editor-main,
+	.props-framework-option-editor-main.is-multi-type {
+		grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) auto auto auto;
+	}
+
+	.props-framework-option-editor-main.is-multi-type .setting-item {
+		grid-column: span 2;
+	}
+
+	.props-framework-option-aliases {
+		grid-column: span 2;
+	}
 }
 
 .props-framework-icon-chip,

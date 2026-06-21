@@ -1,5 +1,6 @@
 import { setIcon } from "obsidian";
-import type { PropertyOption, PropertyValidationResult } from "./types";
+import { formatOptionValue } from "./options";
+import type { PropertyValidationResult, ValueOption } from "./types";
 
 export function renderValidation(el: HTMLElement, result: PropertyValidationResult): void {
 	if (result.valid) {
@@ -23,7 +24,7 @@ export function renderValidation(el: HTMLElement, result: PropertyValidationResu
 	}
 }
 
-export function renderOptionLabel(parentEl: HTMLElement, option: PropertyOption): void {
+export function renderOptionLabel(parentEl: HTMLElement, option: ValueOption): void {
 	if (option.icon) {
 		const iconEl = parentEl.createSpan({ cls: "props-framework-option-icon" });
 		setIcon(iconEl, option.icon);
@@ -31,52 +32,8 @@ export function renderOptionLabel(parentEl: HTMLElement, option: PropertyOption)
 
 	parentEl.createSpan({
 		cls: "props-framework-option-label",
-		text: option.label ?? option.value,
+		text: option.label ?? formatOptionValue(option.value),
 	});
-}
-
-export function uniqueOptions(options: PropertyOption[]): PropertyOption[] {
-	const seen = new Set<string>();
-	const result: PropertyOption[] = [];
-
-	for (const option of options) {
-		if (!option.value || seen.has(option.value)) {
-			continue;
-		}
-		seen.add(option.value);
-		result.push(option);
-	}
-
-	return result;
-}
-
-export function coerceString(value: unknown): string {
-	if (typeof value === "string") {
-		return value;
-	}
-
-	if (value === null || value === undefined) {
-		return "";
-	}
-
-	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
-		return String(value);
-	}
-
-	return "";
-}
-
-export function coerceStringArray(value: unknown): string[] {
-	if (Array.isArray(value)) {
-		return value
-			.filter((item): item is string | number | boolean => {
-				return ["string", "number", "boolean"].includes(typeof item);
-			})
-			.map((item) => String(item));
-	}
-
-	const stringValue = coerceString(value);
-	return stringValue ? [stringValue] : [];
 }
 
 export function stopMetadataEvent(event: Event): void {

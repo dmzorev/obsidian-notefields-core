@@ -10,8 +10,10 @@ Use Select, Multiselect, and nested object fields in the Properties view and Obs
 - **Multiselect fields** with colored pills, icons, filtering, and keyboard-friendly editing.
 - **Nested object fields** for schema-less objects and lists, including recursive nesting and inline key editing.
 - **Bases table support** with compact field previews and editors that expand on focus.
-- **Option metadata** with separate stored values, displayed titles, colors, and icons.
-- **Vault option discovery** that can collect existing values from your notes.
+- **Reusable option collections** shared by select, multiselect, and third-party field types.
+- **Typed YAML values** with text, number, boolean, and mixed-value collections.
+- **Option metadata** with separate stored values, displayed titles, aliases, colors, icons, and plugin metadata.
+- **Vault option discovery** that imports existing values from your notes on demand.
 - **Property display settings** for custom titles and built-in Obsidian icons.
 - **Validation API** with messages, severity, and optional details.
 - **Extensible field registry** that lets other plugins add custom property types and settings.
@@ -65,11 +67,21 @@ You can also manage all definitions under **Settings → NoteFields Core**.
 Each option can have:
 
 - **Value**: the value written to frontmatter.
-- **Title**: the label shown in the interface.
+- **Displayed title**: the label shown in the interface.
+- **Aliases**: additional terms used by option search.
 - **Icon**: any built-in Obsidian icon.
 - **Color**: a preset or custom color.
 
-Options can be configured manually, collected from existing notes, or combined from both sources. Enable **Allow custom values** to let users create values while editing a note.
+Choose **Local options** to keep a value set unique to one property, or create a shared collection and reuse it across multiple Select and Multiselect properties. A shared collection can be edited centrally under **Settings → NoteFields Core → Option collections**.
+
+Each option set has a YAML value type:
+
+- **Text**, **Number**, or **Boolean** converts compatible values to one consistent type.
+- **Any** preserves primitive types and treats `1`, `"1"`, `false`, and `0` as distinct values.
+
+Enable **Allow custom values** to create values while editing a note. With **Remember custom values** enabled, new values are added to the active local or shared option set automatically. Use **Collect values** to scan existing notes and import values already used by that property.
+
+Options have stable internal identities that are never shown in the interface or written to frontmatter. When an option's YAML value changes, NoteFields updates matching values in every note that uses the affected local or shared option set. Stored `[[wikilinks]]` are also updated when their target note is renamed.
 
 ### Edit nested objects
 
@@ -161,6 +173,52 @@ this.register(() => handle?.dispose());
 ```
 
 Custom field IDs should be namespaced with the owner plugin ID. Registered types may provide their own renderer, normalizer, validator, default configuration, icon, and settings UI. A type may also provide an optional `renderBase` renderer for Obsidian Bases; NoteFields falls back to `render` when it is omitted.
+
+### Reuse Value Options
+
+Custom types can opt into the Value Options framework without adopting a fixed config shape:
+
+```ts
+interface MyConfig {
+  options: ValueOptionBinding;
+}
+
+const handle = noteFields?.registerType<MyConfig>({
+  id: "my-plugin:choice",
+  ownerPluginId: this.manifest.id,
+  name: "Choice",
+  defaultConfig: {
+    options: { mode: "local", valueType: "string", options: [] },
+  },
+  optionSupport: {
+    kind: "value",
+    getBinding: (config) => config.options,
+    setBinding: (config, options) => ({ ...config, options }),
+    allowLocal: true,
+    allowShared: true,
+  },
+  renderSettings(el, ctx) {
+    noteFields.renderValueOptionsEditor(el, {
+      binding: ctx.definition.config.options,
+      propertyName: ctx.definition.property,
+      onChange: async (options) => {
+        await ctx.updateDefinition({
+          ...ctx.definition,
+          config: { ...ctx.definition.config, options },
+        });
+      },
+    });
+  },
+  render(el, ctx) {
+    // Render the resolved options in any UI appropriate for this type.
+    const options = noteFields.resolveValueOptions(ctx.config.options);
+    el.setText(options.map((option) => option.label ?? String(option.value)).join(", "));
+    return { type: "my-plugin:choice" };
+  },
+});
+```
+
+The API also exposes `createValueOption` plus collection CRUD methods: `getValueOptionCollections`, `getValueOptionCollection`, `createValueOptionCollection`, `updateValueOptionCollection`, and `removeValueOptionCollection`. Option IDs are framework-managed implementation details; plugins should preserve returned IDs when updating existing options.
 
 ## Current limitations
 
