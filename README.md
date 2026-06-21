@@ -2,16 +2,14 @@
 
 NoteFields Core brings richer, configurable property fields to Obsidian notes while keeping every value in standard YAML frontmatter.
 
-Use Select, Multiselect, and nested object fields directly in the Properties view. Add display titles, Obsidian icons, colors, validation, and purpose-built editors without changing how your notes are stored. Other plugins can register additional field types through the public NoteFields API.
-
-> [!IMPORTANT]
-> NoteFields Core currently enhances note properties. Obsidian Bases integration is planned but is not part of the current release.
+Use Select, Multiselect, and nested object fields in the Properties view and Obsidian Bases tables. Add display titles, Obsidian icons, colors, validation, and purpose-built editors without changing how your notes are stored. Other plugins can register additional field types through the public NoteFields API.
 
 ## Features
 
 - **Select fields** with searchable options and optional custom values.
 - **Multiselect fields** with colored pills, icons, filtering, and keyboard-friendly editing.
 - **Nested object fields** for schema-less objects and lists, including recursive nesting and inline key editing.
+- **Bases table support** with compact field previews and editors that expand on focus.
 - **Option metadata** with separate stored values, displayed titles, colors, and icons.
 - **Vault option discovery** that can collect existing values from your notes.
 - **Property display settings** for custom titles and built-in Obsidian icons.
@@ -76,6 +74,8 @@ Options can be configured manually, collected from existing notes, or combined f
 ### Edit nested objects
 
 Nested object fields support strings, numbers, checkboxes, objects, and lists. Objects and lists can be nested recursively. Click an object key to rename it, use **Enter** to save, or **Escape** to cancel.
+
+In a Bases table, nested fields use a compact one-line preview. Select or focus the cell to open the full recursive editor.
 
 ## Installation
 
@@ -166,7 +166,7 @@ Custom field IDs should be namespaced with the owner plugin ID. Registered types
 
 - Field definitions are global per vault and property name.
 - Folder-specific and note-specific overrides are not yet supported.
-- Obsidian Bases does not yet use NoteFields renderers.
+- Bases integration currently targets the table view; other Bases view layouts may use Obsidian's default presentation.
 - Only built-in Obsidian icons are supported.
 - NoteFields integrates with parts of Obsidian's property system that are not yet exposed through a stable public API. Obsidian updates may occasionally require compatibility fixes.
 
@@ -207,7 +207,7 @@ Pull requests are welcome. Please keep changes focused and run both the build an
 
 Planned directions include:
 
-- Obsidian Bases integration.
+- Additional Obsidian Bases view layouts.
 - Schema-backed object field types.
 - Additional reusable types such as colors, icons, progress, integer, and rating fields.
 - Folder-level field definitions and overrides.

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Compact nested object previews with focus-to-edit behavior in Obsidian Bases tables.
+
+### Fixed
+
+- Multiselect values in Bases tables now remain left-aligned on one line when the cell is too narrow.
+
 ## [1.0.0] - 2026-06-21
 
 ### Added

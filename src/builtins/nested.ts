@@ -30,17 +30,53 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 		render(el, ctx) {
 			let value = isPlainObject(ctx.value) ? ctx.value : {};
 			const collapsedPaths = new Set<string>();
+			const isBasesCell = Boolean(el.closest(".bases-table-cell"));
+			let isEditing = !isBasesCell;
 
 			const render = (): void => {
 				el.empty();
-				const rootEl = el.createDiv({ cls: "props-framework-nested" });
-				containMetadataEvents(rootEl);
-				renderObject(rootEl, value, "", ctx.config.defaultCollapsed, collapsedPaths, (nextValue) => {
-					value = nextValue;
-					ctx.onChange(nextValue);
-					render();
+				const rootEl = el.createDiv({
+					attr: {
+						"aria-label": isEditing ? "Edit nested object" : "Open nested object editor",
+						tabindex: isEditing ? "-1" : "0",
+					},
+					cls: ["props-framework-nested", isEditing ? "is-editing" : "is-viewing"],
 				});
+				containMetadataEvents(rootEl);
+				if (isEditing) {
+					renderObject(rootEl, value, "", ctx.config.defaultCollapsed, collapsedPaths, (nextValue) => {
+						value = nextValue;
+						ctx.onChange(nextValue);
+						render();
+					});
+				} else {
+					renderObjectPreview(rootEl, value);
+					rootEl.addEventListener("click", openEditor);
+					rootEl.addEventListener("focus", openEditor);
+				}
+
+				if (isBasesCell && isEditing) {
+					rootEl.addEventListener("focusout", () => {
+						window.setTimeout(() => {
+							if (!rootEl.isConnected || rootEl.contains(document.activeElement)) {
+								return;
+							}
+							isEditing = false;
+							render();
+						}, 0);
+					});
+				}
 				renderValidation(el, ctx.validate(value));
+			};
+
+			const openEditor = (): void => {
+				if (isEditing) {
+					focusFirstNestedControl(el);
+					return;
+				}
+				isEditing = true;
+				render();
+				focusFirstNestedControl(el);
 			};
 
 			render();
@@ -48,10 +84,7 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 			return {
 				type: "notefields:nested",
 				focus: () => {
-					const inputEl = el.querySelector("input");
-					if (inputEl instanceof HTMLInputElement) {
-						inputEl.focus();
-					}
+					openEditor();
 				},
 			};
 		},
@@ -71,6 +104,58 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 					}));
 		},
 	};
+}
+
+function renderObjectPreview(parentEl: HTMLElement, value: JsonObject): void {
+	const text = formatObjectPreview(value);
+	parentEl.createDiv({
+		attr: { title: text },
+		cls: "props-framework-nested-preview",
+		text,
+	});
+}
+
+function formatObjectPreview(value: JsonObject): string {
+	const entries = Object.entries(value);
+	if (entries.length === 0) {
+		return "Empty object";
+	}
+
+	return `{ ${entries.map(([key, childValue]) => `${key}: ${formatPreviewValue(childValue)}`).join(", ")} }`;
+}
+
+function formatPreviewValue(value: unknown): string {
+	if (Array.isArray(value)) {
+		return `[${value.length}]`;
+	}
+	if (isPlainObject(value)) {
+		return `{${Object.keys(value).length}}`;
+	}
+	if (value === null || value === undefined || value === "") {
+		return "empty";
+	}
+
+	let serialized: string;
+	if (typeof value === "object") {
+		serialized = JSON.stringify(value) ?? "object";
+	} else if (typeof value === "string") {
+		serialized = value;
+	} else if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+		serialized = value.toString();
+	} else {
+		serialized = "value";
+	}
+	const text = serialized.replace(/\s+/g, " ").trim();
+	return text.length > 40 ? `${text.slice(0, 39)}...` : text;
+}
+
+function focusFirstNestedControl(parentEl: HTMLElement): void {
+	window.requestAnimationFrame(() => {
+		const controlEl = parentEl.querySelector("input, select, button");
+		if (controlEl instanceof HTMLElement) {
+			controlEl.focus();
+		}
+	});
 }
 
 function renderObject(

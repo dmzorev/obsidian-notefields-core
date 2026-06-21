@@ -163,6 +163,17 @@ button.props-framework-icon-chip.is-empty:hover {
 	min-width: 0;
 }
 
+.bases-table-cell .props-framework-multiselect.is-viewing,
+.bases-table-cell .props-framework-multiselect.is-viewing .props-framework-multiselect-inline {
+	flex-wrap: nowrap;
+	justify-content: flex-start;
+	overflow: hidden;
+}
+
+.bases-table-cell .props-framework-multiselect.is-viewing .props-framework-value-pill {
+	flex: 0 0 auto;
+}
+
 .props-framework-pill {
 	border-radius: var(--radius-s);
 	background: var(--background-modifier-hover);
@@ -376,6 +387,35 @@ button.props-framework-value-pill {
 
 .props-framework-nested {
 	width: 100%;
+}
+
+.props-framework-nested-preview {
+	width: 100%;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-normal);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.bases-table-cell .props-framework-nested.is-viewing {
+	display: flex;
+	align-items: center;
+	min-height: 30px;
+	cursor: text;
+}
+
+.bases-table-cell .props-framework-nested.is-editing {
+	min-width: min(420px, calc(100vw - 48px));
+	padding: 4px 6px;
+}
+
+.bases-table-cell .props-framework-nested.is-editing .props-framework-nested-row {
+	grid-template-columns: minmax(72px, 120px) minmax(120px, 1fr) auto;
+}
+
+.bases-table-cell .props-framework-nested.is-editing .props-framework-nested-row.is-array-item {
+	grid-template-columns: minmax(120px, 1fr) auto;
 }
 
 .props-framework-nested-entries {
