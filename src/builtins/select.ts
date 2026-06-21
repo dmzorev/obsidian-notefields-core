@@ -536,7 +536,7 @@ function renderInlineOptionEditor(
 			attr: { "aria-label": "Choose icon", type: "button" },
 			cls: ["clickable-icon", "props-framework-icon-chip", option.icon ? "has-value" : "is-empty"],
 		});
-		setIcon(iconButton, option.icon || "lucide-image-plus");
+		setIcon(iconButton, option.icon || "lucide-plus");
 		iconButton.addEventListener("click", () => {
 			new IconPickerModal(ctx.app, option.icon ?? null, async (icon) => {
 				const nextDefinition = await updateOptionAt(ctx, index, { icon: icon ?? undefined });

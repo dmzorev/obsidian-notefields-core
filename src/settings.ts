@@ -394,7 +394,7 @@ export class PropsFrameworkSettingTab extends PluginSettingTab {
 			attr: { "aria-label": "Choose icon", type: "button" },
 			cls: ["clickable-icon", "props-framework-icon-chip", value ? "has-value" : "is-empty"],
 		});
-		setIcon(button, value || "lucide-image-plus");
+		setIcon(button, value || "lucide-plus");
 		button.addEventListener("click", () => {
 			new IconPickerModal(this.app, value || null, async (icon) => {
 				await onChange(icon ?? "");

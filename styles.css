@@ -56,8 +56,16 @@
 	color: var(--text-normal);
 }
 
-.props-framework-icon-chip.is-empty {
-	border-style: dashed;
+button.props-framework-icon-chip.is-empty {
+	border: 1px dashed var(--text-muted);
+	background: var(--background-secondary);
+	color: var(--text-muted);
+}
+
+button.props-framework-icon-chip.is-empty:hover {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
 .props-framework-color-chip {
