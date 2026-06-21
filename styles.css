@@ -140,6 +140,21 @@
 	gap: 4px;
 }
 
+.props-framework-multiselect {
+	min-height: 30px;
+	cursor: text;
+}
+
+.props-framework-select {
+	min-height: 30px;
+	cursor: text;
+}
+
+.props-framework-multiselect-inline {
+	width: 100%;
+	min-width: 0;
+}
+
 .props-framework-pill {
 	border-radius: var(--radius-s);
 	background: var(--background-modifier-hover);
@@ -178,25 +193,29 @@ button.props-framework-value-pill {
 	opacity: 1;
 }
 
+.props-framework-select-input,
 .props-framework-multiselect-input {
-	min-width: 110px;
-	width: 140px;
+	flex: 1 1 160px;
+	min-width: 120px;
+	width: auto;
+	min-height: 28px;
 	border: none;
 	background: transparent;
 	color: var(--text-normal);
+	box-shadow: none;
+	outline: none;
 }
 
 .props-framework-suggestions {
 	flex-basis: 100%;
 	z-index: 20;
-	min-width: min(320px, 100%);
-	max-width: 420px;
+	min-width: 0;
+	max-width: 100%;
 	margin-top: 4px;
-	padding: 6px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background: var(--background-primary);
-	box-shadow: var(--shadow-s);
+	padding: 4px 0;
+	border: none;
+	background: transparent;
+	box-shadow: none;
 }
 
 .props-framework-suggestion-input {
@@ -207,6 +226,7 @@ button.props-framework-value-pill {
 .props-framework-suggestion-list {
 	display: flex;
 	flex-direction: column;
+	align-items: flex-start;
 	gap: 4px;
 	max-height: 180px;
 	overflow: auto;
@@ -214,6 +234,8 @@ button.props-framework-value-pill {
 
 .props-framework-suggestion-item {
 	display: flex;
+	width: auto;
+	max-width: 100%;
 	justify-content: flex-start;
 	padding: 2px;
 	text-align: left;
@@ -372,6 +394,33 @@ button.props-framework-value-pill {
 	font-size: var(--metadata-label-font-size);
 	line-height: var(--line-height-tight);
 	overflow-wrap: anywhere;
+}
+
+.props-framework-nested-key-label {
+	display: block;
+	width: 100%;
+	min-height: 24px;
+	border: 1px solid transparent;
+	background: transparent;
+	color: inherit;
+	padding: 1px 4px;
+	text-align: left;
+	overflow-wrap: anywhere;
+	cursor: text;
+}
+
+.props-framework-nested-key-label:hover {
+	border-color: var(--background-modifier-border);
+	background: transparent;
+}
+
+.props-framework-nested-key-input {
+	width: 100%;
+	min-width: 0;
+}
+
+.props-framework-nested-key-input.is-invalid {
+	border-color: var(--text-error);
 }
 
 .props-framework-nested-value {

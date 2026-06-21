@@ -48,6 +48,7 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 		render(el, ctx) {
 			let value = coerceString(ctx.value);
 			let isOpen = false;
+			let isEditing = false;
 			let query = "";
 
 			const render = (): void => {
@@ -55,27 +56,74 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 				const selectedOption = options.find((option) => option.value === value) ?? (value ? { value } : null);
 				el.empty();
 
-				const wrapperEl = el.createDiv({ cls: "props-framework-select" });
-				containMetadataEvents(wrapperEl);
-
-				const pillButton = wrapperEl.createEl("button", {
+				const wrapperEl = el.createDiv({
 					attr: {
-						"aria-label": "Select value",
-						type: "button",
+						"aria-label": "Edit selected value",
+						tabindex: isEditing ? "-1" : "0",
 					},
-					cls: ["props-framework-value-pill", value ? "" : "is-empty"],
+					cls: ["props-framework-select", isEditing ? "is-editing" : "is-viewing"],
 				});
-				renderOptionPillContent(pillButton, selectedOption ?? { value: ctx.config.placeholder || "Select value" });
-				pillButton.addEventListener("click", (event) => {
-					stopMetadataEvent(event);
-					isOpen = !isOpen;
-					render();
+				containMetadataEvents(wrapperEl);
+				wrapperEl.addEventListener("focusout", () => {
+					window.setTimeout(() => {
+						if (!wrapperEl.isConnected || wrapperEl.contains(document.activeElement)) {
+							return;
+						}
+						query = "";
+						isOpen = false;
+						isEditing = false;
+						render();
+					}, 0);
 				});
+				wrapperEl.addEventListener("focus", () => openEditor());
+				wrapperEl.addEventListener("click", () => openEditor());
+
+				if (isEditing) {
+					const inputEl = wrapperEl.createEl("input", {
+						attr: {
+							placeholder: "Filter or add value",
+							type: "text",
+						},
+						cls: "props-framework-select-input",
+						value: query,
+					});
+					inputEl.addEventListener("input", () => {
+						query = inputEl.value;
+						isOpen = true;
+						renderSuggestions(wrapperEl, getSuggestionConfig());
+					});
+					inputEl.addEventListener("keydown", (event) => {
+						if (event.key === "Escape") {
+							stopMetadataEvent(event);
+							query = "";
+							isOpen = false;
+							isEditing = false;
+							render();
+							return;
+						}
+						if (event.key === "Enter" && ctx.config.allowCustom && query.trim()) {
+							stopMetadataEvent(event);
+							selectValue(query.trim());
+						}
+					});
+					window.requestAnimationFrame(() => inputEl.focus());
+				} else {
+					const pillEl = wrapperEl.createDiv({
+						cls: ["props-framework-value-pill", value ? "" : "is-empty"],
+					});
+					renderOptionPillContent(pillEl, selectedOption ?? { value: ctx.config.placeholder || "Select value" });
+				}
 
 				if (isOpen) {
-					renderSuggestions(wrapperEl, {
+					renderSuggestions(wrapperEl, getSuggestionConfig());
+				}
+
+				renderValidation(el, validateSelectValue(value, options.map((option) => option.value), ctx.config.allowCustom));
+
+				function getSuggestionConfig(): SuggestionConfig {
+					return {
 						allowCustom: ctx.config.allowCustom,
-						showInput: true,
+						showInput: false,
 						options,
 						query,
 						selectedValues: value ? [value] : [],
@@ -83,17 +131,27 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 							query = nextQuery;
 							render();
 						},
-						onSelect: (nextValue) => {
-							value = nextValue;
-							isOpen = false;
-							query = "";
-							ctx.onChange(nextValue || null);
-							render();
-						},
-					});
+						onSelect: selectValue,
+					};
 				}
 
-				renderValidation(el, validateSelectValue(value, options.map((option) => option.value), ctx.config.allowCustom));
+				function selectValue(nextValue: string): void {
+					value = nextValue;
+					isOpen = false;
+					isEditing = false;
+					query = "";
+					ctx.onChange(nextValue || null);
+					render();
+				}
+
+				function openEditor(): void {
+					if (isEditing) {
+						return;
+					}
+					isEditing = true;
+					isOpen = true;
+					render();
+				}
 			};
 
 			render();
@@ -101,10 +159,9 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 			return {
 				type: "framework:select",
 				focus: () => {
-					const buttonEl = el.querySelector("button");
-					if (buttonEl instanceof HTMLButtonElement) {
-						buttonEl.focus();
-					}
+					isEditing = true;
+					isOpen = true;
+					render();
 				},
 			};
 		},
@@ -154,21 +211,37 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 			let value = coerceStringArray(ctx.value);
 			let query = "";
 			let isOpen = false;
+			let isEditing = false;
 
 			const render = (): void => {
 				const options = uniqueOptions(resolveOptions(ctx.definition.property));
 				el.empty();
 
-				const wrapperEl = el.createDiv({ cls: "props-framework-multiselect" });
+				const wrapperEl = el.createDiv({
+					attr: {
+						"aria-label": "Edit multiple values",
+						tabindex: isEditing ? "-1" : "0",
+					},
+					cls: ["props-framework-multiselect", isEditing ? "is-editing" : "is-viewing"],
+				});
 				containMetadataEvents(wrapperEl);
 				wrapperEl.addEventListener("focusout", () => {
 					window.setTimeout(() => {
-						if (query.trim() || wrapperEl.contains(document.activeElement)) {
+						if (!wrapperEl.isConnected || wrapperEl.contains(document.activeElement)) {
 							return;
 						}
+						query = "";
 						isOpen = false;
+						isEditing = false;
 						render();
 					}, 0);
+				});
+				wrapperEl.addEventListener("focus", () => openEditor());
+				wrapperEl.addEventListener("click", (event) => {
+					if (event.target instanceof Element && event.target.closest("button")) {
+						return;
+					}
+					openEditor();
 				});
 				const inlineEl = wrapperEl.createDiv({ cls: "props-framework-multiselect-inline" });
 
@@ -193,35 +266,46 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 					});
 				}
 
-				const inputEl = inlineEl.createEl("input", {
-					attr: {
-						placeholder: value.length === 0 ? "Add value" : "",
-						type: "text",
-					},
-					cls: "props-framework-multiselect-input",
-					value: query,
-				});
-				inputEl.addEventListener("focus", () => {
-					isOpen = true;
-					renderSuggestions(wrapperEl, getSuggestionConfig());
-				});
-				inputEl.addEventListener("input", () => {
-					query = inputEl.value;
-					isOpen = true;
-					renderSuggestions(wrapperEl, getSuggestionConfig());
-				});
-				inputEl.addEventListener("keydown", (event) => {
-					if (event.key !== "Enter") {
-						return;
-					}
-					stopMetadataEvent(event);
-					const nextValue = query.trim();
-					if (ctx.config.allowCustom && nextValue && !value.includes(nextValue)) {
-						query = "";
-						isOpen = false;
-						updateValue([...value, nextValue]);
-					}
-				});
+				if (isEditing) {
+					const inputEl = inlineEl.createEl("input", {
+						attr: {
+							placeholder: "Add value",
+							type: "text",
+						},
+						cls: "props-framework-multiselect-input",
+						value: query,
+					});
+					inputEl.addEventListener("focus", () => {
+						isOpen = true;
+						renderSuggestions(wrapperEl, getSuggestionConfig());
+					});
+					inputEl.addEventListener("input", () => {
+						query = inputEl.value;
+						isOpen = true;
+						renderSuggestions(wrapperEl, getSuggestionConfig());
+					});
+					inputEl.addEventListener("keydown", (event) => {
+						if (event.key === "Escape") {
+							stopMetadataEvent(event);
+							query = "";
+							isOpen = false;
+							isEditing = false;
+							render();
+							return;
+						}
+						if (event.key !== "Enter") {
+							return;
+						}
+						stopMetadataEvent(event);
+						const nextValue = query.trim();
+						if (ctx.config.allowCustom && nextValue && !value.includes(nextValue)) {
+							query = "";
+							isOpen = true;
+							updateValue([...value, nextValue]);
+						}
+					});
+					window.requestAnimationFrame(() => inputEl.focus());
+				}
 
 				if (isOpen) {
 					renderSuggestions(wrapperEl, getSuggestionConfig());
@@ -245,10 +329,19 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 								return;
 							}
 							query = "";
-							isOpen = false;
+							isOpen = true;
 							updateValue([...value, nextValue]);
 						},
 					};
+				}
+
+				function openEditor(): void {
+					if (isEditing) {
+						return;
+					}
+					isEditing = true;
+					isOpen = true;
+					render();
 				}
 			};
 
@@ -257,10 +350,9 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 			return {
 				type: "framework:multiselect",
 				focus: () => {
-					const inputEl = el.querySelector("input");
-					if (inputEl instanceof HTMLInputElement) {
-						inputEl.focus();
-					}
+					isEditing = true;
+					isOpen = true;
+					render();
 				},
 			};
 		},

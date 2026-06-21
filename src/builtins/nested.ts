@@ -94,6 +94,17 @@ function renderObject(
 			const nextValue = { ...value };
 			delete nextValue[key];
 			onChange(nextValue);
+		}, (nextKey) => {
+			if (!nextKey || nextKey === key || nextKey in value) {
+				return false;
+			}
+
+			const nextPath = joinPath(parentPath, nextKey);
+			renameCollapsedPath(collapsedPaths, path, nextPath);
+			onChange(Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => {
+				return entryKey === key ? [nextKey, entryValue] : [entryKey, entryValue];
+			})));
+			return true;
 		});
 	}
 
@@ -139,14 +150,15 @@ function renderEntry(
 	defaultCollapsed: boolean,
 	collapsedPaths: Set<string>,
 	onChange: (value: unknown) => void,
-	onDelete: () => void
+	onDelete: () => void,
+	onRename?: (key: string) => boolean
 ): void {
 	const rowEl = parentEl.createDiv({
 		cls: ["props-framework-nested-row", showKey ? "" : "is-array-item"],
 	});
 	if (showKey) {
 		const keyEl = rowEl.createDiv({ cls: "props-framework-nested-key" });
-		keyEl.createSpan({ text: key });
+		renderEditableKey(keyEl, key, onRename);
 	}
 
 	const valueEl = rowEl.createDiv({ cls: "props-framework-nested-value" });
@@ -157,6 +169,81 @@ function renderEntry(
 	deleteButton.addEventListener("click", (event) => {
 		stopMetadataEvent(event);
 		onDelete();
+	});
+}
+
+function renderEditableKey(parentEl: HTMLElement, key: string, onRename?: (key: string) => boolean): void {
+	const labelEl = parentEl.createSpan({
+		attr: {
+			"aria-label": `Rename ${key}`,
+			role: "button",
+			tabindex: onRename ? "0" : "-1",
+		},
+		cls: "props-framework-nested-key-label",
+		text: key,
+	});
+	if (!onRename) {
+		return;
+	}
+
+	const beginEditing = (event: Event): void => {
+		stopMetadataEvent(event);
+		labelEl.hide();
+		const inputEl = parentEl.createEl("input", {
+			attr: {
+				"aria-label": `Rename ${key}`,
+				type: "text",
+			},
+			cls: "metadata-input-text props-framework-nested-key-input",
+			value: key,
+		});
+		let finished = false;
+
+		const cancel = (): void => {
+			if (finished) {
+				return;
+			}
+			finished = true;
+			inputEl.remove();
+			labelEl.show();
+		};
+		const commit = (): void => {
+			if (finished) {
+				return;
+			}
+			const nextKey = inputEl.value.trim();
+			if (!nextKey || nextKey === key) {
+				cancel();
+				return;
+			}
+			if (!onRename(nextKey)) {
+				inputEl.addClass("is-invalid");
+				inputEl.focus();
+				return;
+			}
+			finished = true;
+		};
+
+		inputEl.addEventListener("input", () => inputEl.removeClass("is-invalid"));
+		inputEl.addEventListener("blur", commit);
+		inputEl.addEventListener("keydown", (inputEvent) => {
+			if (inputEvent.key === "Enter") {
+				stopMetadataEvent(inputEvent);
+				commit();
+			} else if (inputEvent.key === "Escape") {
+				stopMetadataEvent(inputEvent);
+				cancel();
+			}
+		});
+		inputEl.focus();
+		inputEl.select();
+	};
+
+	labelEl.addEventListener("click", beginEditing);
+	labelEl.addEventListener("keydown", (event) => {
+		if (event.key === "Enter" || event.key === " ") {
+			beginEditing(event);
+		}
 	});
 }
 
@@ -358,4 +445,18 @@ function stringifyScalar(value: unknown): string {
 
 function joinPath(parentPath: string, key: string): string {
 	return parentPath ? `${parentPath}.${key}` : key;
+}
+
+function renameCollapsedPath(collapsedPaths: Set<string>, oldPath: string, newPath: string): void {
+	const replacements: Array<[string, string]> = [];
+	for (const path of collapsedPaths) {
+		if (path === oldPath || path.startsWith(`${oldPath}.`) || path === `${oldPath}:expanded`) {
+			replacements.push([path, `${newPath}${path.slice(oldPath.length)}`]);
+		}
+	}
+
+	for (const [oldValue, newValue] of replacements) {
+		collapsedPaths.delete(oldValue);
+		collapsedPaths.add(newValue);
+	}
 }
