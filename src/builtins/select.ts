@@ -21,7 +21,7 @@ interface SelectSettingsContext {
 
 export function createSelectType(resolveOptions: OptionResolver): PropertyType<SelectPropertyConfig> {
 	return {
-		id: "framework:select",
+		id: "notefields:select",
 		name: "Select",
 		description: "Single value selected from configured or collected options.",
 		icon: "lucide-list-check",
@@ -157,7 +157,7 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 			render();
 
 			return {
-				type: "framework:select",
+				type: "notefields:select",
 				focus: () => {
 					isEditing = true;
 					isOpen = true;
@@ -171,7 +171,7 @@ export function createSelectType(resolveOptions: OptionResolver): PropertyType<S
 
 export function createMultiselectType(resolveOptions: OptionResolver): PropertyType<SelectPropertyConfig> {
 	return {
-		id: "framework:multiselect",
+		id: "notefields:multiselect",
 		name: "Multiselect",
 		description: "Multiple string values selected from configured or collected options.",
 		icon: "lucide-list-plus",
@@ -348,7 +348,7 @@ export function createMultiselectType(resolveOptions: OptionResolver): PropertyT
 			render();
 
 			return {
-				type: "framework:multiselect",
+				type: "notefields:multiselect",
 				focus: () => {
 					isEditing = true;
 					isOpen = true;

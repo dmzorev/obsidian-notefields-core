@@ -7,7 +7,7 @@ type NewValueKind = "text" | "number" | "checkbox" | "object" | "list";
 
 export function createNestedType(): PropertyType<NestedPropertyConfig> {
 	return {
-		id: "framework:nested",
+		id: "notefields:nested",
 		name: "Nested object",
 		description: "Schema-less editor for nested YAML object values.",
 		icon: "lucide-braces",
@@ -46,7 +46,7 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 			render();
 
 			return {
-				type: "framework:nested",
+				type: "notefields:nested",
 				focus: () => {
 					const inputEl = el.querySelector("input");
 					if (inputEl instanceof HTMLInputElement) {

@@ -74,9 +74,9 @@ export interface NestedPropertyConfig {
 }
 
 export type BuiltInPropertyTypeId =
-	| "framework:select"
-	| "framework:multiselect"
-	| "framework:nested";
+	| "notefields:select"
+	| "notefields:multiselect"
+	| "notefields:nested";
 
 export interface PropertyDefinition<TConfig = unknown> {
 	property: string;
@@ -92,7 +92,7 @@ export interface PropertySettingsContext<TConfig = unknown> {
 	updateDefinition: (definition: PropertyDefinition<TConfig>) => Promise<void>;
 }
 
-export interface FrameworkSettings {
+export interface NoteFieldsSettings {
 	properties: Record<string, PropertyDefinition>;
 	dataVersion: number;
 }
@@ -101,7 +101,7 @@ export interface PropertyTypeHandle {
 	dispose: () => void;
 }
 
-export interface PropsFrameworkApi {
+export interface NoteFieldsApi {
 	getPropertyDefinition: (propertyName: string) => PropertyDefinition | null;
 	getPropertyDefinitions: () => PropertyDefinition[];
 	setPropertyDefinition: (definition: PropertyDefinition) => Promise<void>;

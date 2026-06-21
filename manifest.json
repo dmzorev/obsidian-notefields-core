@@ -1,9 +1,10 @@
 {
-	"id": "obsidian-props-framework",
-	"name": "Properties Framework",
+	"id": "notefields-core",
+	"name": "NoteFields Core",
 	"version": "1.0.0",
 	"minAppVersion": "1.6.7",
-	"description": "Framework for richer Obsidian note property types, rendering, editing and validation.",
-	"author": "",
+	"description": "Adds richer note property types, editors, validation, icons, colors, and an API for extending Obsidian properties.",
+	"author": "Dmitry Zorev",
+	"authorUrl": "https://github.com/dmzorev",
 	"isDesktopOnly": false
 }

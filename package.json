@@ -1,16 +1,31 @@
 {
-	"name": "obsidian-props-framework",
+	"name": "notefields-core",
 	"version": "1.0.0",
-	"description": "Framework for richer Obsidian note property types, rendering, editing and validation.",
+	"description": "Extensible rich property types and editors for Obsidian notes.",
 	"main": "main.js",
 	"type": "module",
+	"author": "Dmitry Zorev",
+	"homepage": "https://github.com/dmzorev/notefields-core#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/dmzorev/notefields-core.git"
+	},
+	"bugs": {
+		"url": "https://github.com/dmzorev/notefields-core/issues"
+	},
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint ."
 	},
-	"keywords": [],
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"properties",
+		"frontmatter",
+		"metadata"
+	],
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",

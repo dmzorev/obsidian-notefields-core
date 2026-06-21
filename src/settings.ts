@@ -1,8 +1,8 @@
 import { App, PluginSettingTab, Setting, setIcon } from "obsidian";
-import type PropsFrameworkPlugin from "./main";
+import type NoteFieldsCorePlugin from "./main";
 import { ColorPickerModal, IconPickerModal } from "./pickers";
 import type {
-	FrameworkSettings,
+	NoteFieldsSettings,
 	NestedPropertyConfig,
 	PropertyDefinition,
 	PropertyOption,
@@ -20,7 +20,7 @@ export const DEFAULT_NESTED_CONFIG: NestedPropertyConfig = {
 	defaultCollapsed: false,
 };
 
-export const DEFAULT_SETTINGS: FrameworkSettings = {
+export const DEFAULT_SETTINGS: NoteFieldsSettings = {
 	properties: {},
 	dataVersion: 1,
 };
@@ -37,11 +37,11 @@ function colorToCss(color: string): string {
 }
 
 export function getDefaultConfig(typeId: string): SelectPropertyConfig | NestedPropertyConfig | Record<string, never> {
-	if (typeId === "framework:select" || typeId === "framework:multiselect") {
+	if (typeId === "notefields:select" || typeId === "notefields:multiselect") {
 		return { ...DEFAULT_SELECT_CONFIG, options: [] };
 	}
 
-	if (typeId === "framework:nested") {
+	if (typeId === "notefields:nested") {
 		return { ...DEFAULT_NESTED_CONFIG };
 	}
 
@@ -49,20 +49,22 @@ export function getDefaultConfig(typeId: string): SelectPropertyConfig | NestedP
 }
 
 export function normalizeDefinition(definition: PropertyDefinition): PropertyDefinition {
+	const typeId = migrateTypeId(definition.typeId);
 	return {
 		...definition,
 		property: definition.property.trim(),
+		typeId,
 		config: {
-			...getDefaultConfig(definition.typeId),
+			...getDefaultConfig(typeId),
 			...(definition.config as Record<string, unknown>),
 		},
 	};
 }
 
-export class PropsFrameworkSettingTab extends PluginSettingTab {
-	private plugin: PropsFrameworkPlugin;
+export class NoteFieldsSettingTab extends PluginSettingTab {
+	private plugin: NoteFieldsCorePlugin;
 
-	constructor(app: App, plugin: PropsFrameworkPlugin) {
+	constructor(app: App, plugin: NoteFieldsCorePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -118,8 +120,8 @@ export class PropsFrameworkSettingTab extends PluginSettingTab {
 
 					await this.plugin.api.setPropertyDefinition({
 						property,
-						typeId: "framework:select",
-						config: getDefaultConfig("framework:select"),
+						typeId: "notefields:select",
+						config: getDefaultConfig("notefields:select"),
 					});
 					this.display();
 				}));
@@ -172,11 +174,11 @@ export class PropsFrameworkSettingTab extends PluginSettingTab {
 			this.display();
 		}, "Icon");
 
-		if (definition.typeId === "framework:select" || definition.typeId === "framework:multiselect") {
+		if (definition.typeId === "notefields:select" || definition.typeId === "notefields:multiselect") {
 			this.renderSelectConfig(sectionEl, definition as PropertyDefinition<SelectPropertyConfig>);
 		}
 
-		if (definition.typeId === "framework:nested") {
+		if (definition.typeId === "notefields:nested") {
 			this.renderNestedConfig(sectionEl, definition as PropertyDefinition<NestedPropertyConfig>);
 		}
 
@@ -430,4 +432,14 @@ export class PropsFrameworkSettingTab extends PluginSettingTab {
 					});
 				}));
 	}
+}
+
+function migrateTypeId(typeId: string): string {
+	const legacyTypeIds: Record<string, string> = {
+		"framework:display": "notefields:display",
+		"framework:multiselect": "notefields:multiselect",
+		"framework:nested": "notefields:nested",
+		"framework:select": "notefields:select",
+	};
+	return legacyTypeIds[typeId] ?? typeId;
 }

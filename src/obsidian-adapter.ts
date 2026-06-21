@@ -1,12 +1,12 @@
 import { MarkdownView, Menu, Modal, Setting, setIcon } from "obsidian";
-import type PropsFrameworkPlugin from "./main";
+import type NoteFieldsCorePlugin from "./main";
 import { IconPickerModal } from "./pickers";
 import type { PropertyDefinition, PropertyWidgetComponent } from "./types";
 import { normalizeValidationResult } from "./types";
 import { renderValidation } from "./ui";
 
 interface ObsidianPropertyRenderContext {
-	app: PropsFrameworkPlugin["app"];
+	app: NoteFieldsCorePlugin["app"];
 	key: string;
 	sourcePath: string;
 	onChange: (value: unknown) => void;
@@ -34,9 +34,9 @@ interface MetadataTypeManagerLike {
 }
 
 const BUILTIN_WIDGET_IDS = [
-	"framework:select",
-	"framework:multiselect",
-	"framework:nested",
+	"notefields:select",
+	"notefields:multiselect",
+	"notefields:nested",
 ] as const;
 
 export class ObsidianPropertyAdapter {
@@ -46,7 +46,7 @@ export class ObsidianPropertyAdapter {
 	private originalWidgets = new Map<string, ObsidianPropertyWidget | undefined>();
 	private originalWidgetRenders = new Map<ObsidianPropertyWidget, ObsidianPropertyWidget["render"]>();
 
-	constructor(private readonly plugin: PropsFrameworkPlugin) {}
+	constructor(private readonly plugin: NoteFieldsCorePlugin) {}
 
 	load(): void {
 		this.metadataTypeManager = (this.plugin.app as unknown as {
@@ -54,7 +54,7 @@ export class ObsidianPropertyAdapter {
 		}).metadataTypeManager ?? null;
 
 		if (!this.metadataTypeManager?.registeredTypeWidgets) {
-			console.warn("Obsidian Props Framework: metadataTypeManager is not available.");
+			console.warn("NoteFields Core: metadataTypeManager is not available.");
 			return;
 		}
 
@@ -149,7 +149,7 @@ export class ObsidianPropertyAdapter {
 			}
 
 			const definition = this.plugin.api.getPropertyDefinition(propertyName);
-			if (!definition || definition.typeId === "framework:display" || !this.metadataTypeManager?.registeredTypeWidgets) {
+			if (!definition || definition.typeId === "notefields:display" || !this.metadataTypeManager?.registeredTypeWidgets) {
 				return originalResult;
 			}
 
@@ -378,7 +378,7 @@ export class ObsidianPropertyAdapter {
 
 class PropertyBasicsModal extends Modal {
 	constructor(
-		private readonly plugin: PropsFrameworkPlugin,
+		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly propertyName: string
 	) {
 		super(plugin.app);
@@ -484,7 +484,7 @@ class PropertyBasicsModal extends Modal {
 
 class PropertySettingsModal extends Modal {
 	constructor(
-		private readonly plugin: PropsFrameworkPlugin,
+		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly propertyName: string
 	) {
 		super(plugin.app);

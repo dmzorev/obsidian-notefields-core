@@ -1,32 +1,32 @@
 import { Plugin, TFile } from "obsidian";
-import { FrameworkApi, PropertyTypeRegistry } from "./api";
+import { NoteFieldsCoreApi, PropertyTypeRegistry } from "./api";
 import { createNestedType } from "./builtins/nested";
 import { createMultiselectType, createSelectType } from "./builtins/select";
 import { ObsidianPropertyAdapter } from "./obsidian-adapter";
 import {
 	DEFAULT_SETTINGS,
-	PropsFrameworkSettingTab,
+	NoteFieldsSettingTab,
 	getDefaultConfig,
 	normalizeDefinition,
 	normalizePropertyName,
 } from "./settings";
 import type {
-	FrameworkSettings,
+	NoteFieldsSettings,
 	PropertyDefinition,
 	PropertyOption,
-	PropsFrameworkApi,
+	NoteFieldsApi,
 	SelectPropertyConfig,
 } from "./types";
 
 declare module "obsidian" {
 	interface Plugin {
-		api?: PropsFrameworkApi;
+		api?: NoteFieldsApi;
 	}
 }
 
-export default class PropsFrameworkPlugin extends Plugin {
-	settings: FrameworkSettings;
-	api: FrameworkApi;
+export default class NoteFieldsCorePlugin extends Plugin {
+	settings: NoteFieldsSettings;
+	api: NoteFieldsCoreApi;
 	adapter: ObsidianPropertyAdapter | null = null;
 
 	private readonly registry = new PropertyTypeRegistry();
@@ -34,13 +34,13 @@ export default class PropsFrameworkPlugin extends Plugin {
 	async onload(): Promise<void> {
 		await this.loadSettings();
 
-		this.api = new FrameworkApi(this, this.registry);
+		this.api = new NoteFieldsCoreApi(this, this.registry);
 		this.registerBuiltInTypes();
 
 		this.adapter = new ObsidianPropertyAdapter(this);
 		this.adapter.load();
 
-		this.addSettingTab(new PropsFrameworkSettingTab(this.app, this));
+		this.addSettingTab(new NoteFieldsSettingTab(this.app, this));
 		this.addCommand({
 			id: "refresh-managed-properties",
 			name: "Refresh managed properties",
@@ -54,7 +54,7 @@ export default class PropsFrameworkPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const data = ((await this.loadData()) ?? {}) as Partial<FrameworkSettings>;
+		const data = ((await this.loadData()) ?? {}) as Partial<NoteFieldsSettings>;
 		const properties = data.properties ?? {};
 
 		this.settings = {
@@ -80,7 +80,7 @@ export default class PropsFrameworkPlugin extends Plugin {
 	collectOptions(propertyName: string, sourceFile?: TFile | null): PropertyOption[] {
 		void sourceFile;
 		const definition = this.api.getPropertyDefinition(propertyName);
-		if (!definition || (definition.typeId !== "framework:select" && definition.typeId !== "framework:multiselect")) {
+		if (!definition || (definition.typeId !== "notefields:select" && definition.typeId !== "notefields:multiselect")) {
 			return [];
 		}
 
@@ -132,7 +132,7 @@ export default class PropsFrameworkPlugin extends Plugin {
 
 		const definition = normalizeDefinition({
 			property: propertyName,
-			typeId: "framework:display",
+			typeId: "notefields:display",
 			config: {},
 		});
 

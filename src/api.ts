@@ -1,5 +1,5 @@
 import type { App, TFile } from "obsidian";
-import type PropsFrameworkPlugin from "./main";
+import type NoteFieldsCorePlugin from "./main";
 import { normalizeDefinition, normalizePropertyName } from "./settings";
 import type {
 	PropertyDefinition,
@@ -9,7 +9,7 @@ import type {
 	PropertyTypeHandle,
 	PropertyTypeId,
 	PropertyTypeRegistration,
-	PropsFrameworkApi,
+	NoteFieldsApi,
 } from "./types";
 import { normalizeValidationResult, type PropertyValidationResult } from "./types";
 
@@ -44,9 +44,9 @@ export class PropertyTypeRegistry {
 	}
 }
 
-export class FrameworkApi implements PropsFrameworkApi {
+export class NoteFieldsCoreApi implements NoteFieldsApi {
 	constructor(
-		private readonly plugin: PropsFrameworkPlugin,
+		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly registry: PropertyTypeRegistry
 	) {}
 
@@ -159,15 +159,17 @@ export class FrameworkApi implements PropsFrameworkApi {
 	}
 }
 
-export function getPropsFrameworkApi(app: App): PropsFrameworkApi | null {
+export function getNoteFieldsApi(app: App): NoteFieldsApi | null {
 	const appWithPlugins = app as App & {
 		plugins?: {
-			plugins?: Record<string, { api?: PropsFrameworkApi }>;
-			getPlugin?: (id: string) => { api?: PropsFrameworkApi } | null;
+			plugins?: Record<string, { api?: NoteFieldsApi }>;
+			getPlugin?: (id: string) => { api?: NoteFieldsApi } | null;
 		};
 	};
 
-	return appWithPlugins.plugins?.getPlugin?.("obsidian-props-framework")?.api
+	return appWithPlugins.plugins?.getPlugin?.("notefields-core")?.api
+		?? appWithPlugins.plugins?.plugins?.["notefields-core"]?.api
+		?? appWithPlugins.plugins?.getPlugin?.("obsidian-props-framework")?.api
 		?? appWithPlugins.plugins?.plugins?.["obsidian-props-framework"]?.api
 		?? null;
 }
