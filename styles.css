@@ -1,8 +1,450 @@
-/*
+.props-framework-settings .props-framework-definition {
+	border-top: 1px solid var(--background-modifier-border);
+	padding: 12px 0;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.props-framework-settings .props-framework-definition h3 {
+	margin: 0 0 6px;
+	font-size: var(--font-ui-medium);
+}
 
-If your plugin does not need CSS, delete this file.
+.props-framework-empty {
+	margin-top: 12px;
+	color: var(--text-muted);
+}
 
-*/
+.props-framework-option-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 4px 0 10px;
+}
+
+.props-framework-option-editor-row {
+	display: grid;
+	grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) auto auto auto;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 0;
+}
+
+.props-framework-option-editor-row .setting-item {
+	border: none;
+	padding: 0;
+}
+
+.props-framework-icon-chip,
+.props-framework-color-chip {
+	width: 28px;
+	height: 28px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	cursor: var(--cursor);
+}
+
+.props-framework-icon-chip:hover,
+.props-framework-color-chip:hover {
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+}
+
+.props-framework-icon-chip.has-value {
+	border-color: transparent;
+	background: transparent;
+	color: var(--text-normal);
+}
+
+.props-framework-icon-chip.is-empty {
+	border-style: dashed;
+}
+
+.props-framework-color-chip {
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+
+.props-framework-color-chip.is-empty {
+	border-style: dashed;
+	background: var(--background-secondary) !important;
+	box-shadow: none;
+}
+
+.props-framework-select,
+.props-framework-multiselect {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	position: relative;
+}
+
+.props-framework-key-container {
+	position: relative;
+}
+
+.metadata-property-key-input.props-framework-has-displayed-title {
+	color: transparent;
+	caret-color: var(--text-normal);
+}
+
+.metadata-property-key-input.props-framework-has-displayed-title:focus {
+	color: var(--text-normal);
+}
+
+.metadata-property-key-input.props-framework-has-displayed-title:focus + .props-framework-displayed-title {
+	display: none;
+}
+
+.props-framework-key-container:focus-within .props-framework-displayed-title {
+	display: none;
+}
+
+.props-framework-displayed-title {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	overflow: hidden;
+	color: var(--metadata-label-text-color);
+	pointer-events: none;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.props-framework-custom-input {
+	min-width: 140px;
+}
+
+.props-framework-option-preview,
+.props-framework-pill,
+.props-framework-value-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+}
+
+.props-framework-option-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.props-framework-pills,
+.props-framework-multiselect-controls,
+.props-framework-multiselect-inline {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+}
+
+.props-framework-pill {
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	padding: 2px 4px;
+}
+
+.props-framework-value-pill {
+	--props-framework-pill-bg: var(--background-modifier-hover);
+	--props-framework-pill-color: var(--text-normal);
+	min-height: 26px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: var(--props-framework-pill-bg);
+	color: var(--props-framework-pill-color);
+	padding: 2px 8px;
+	font-size: var(--font-ui-small);
+	line-height: 1.2;
+}
+
+button.props-framework-value-pill {
+	cursor: var(--cursor);
+}
+
+.props-framework-value-pill.is-empty {
+	color: var(--text-muted);
+	background: transparent;
+}
+
+.props-framework-value-pill .props-framework-pill-remove {
+	margin-right: -5px;
+	color: inherit;
+	opacity: 0.7;
+}
+
+.props-framework-value-pill .props-framework-pill-remove:hover {
+	opacity: 1;
+}
+
+.props-framework-multiselect-input {
+	min-width: 110px;
+	width: 140px;
+	border: none;
+	background: transparent;
+	color: var(--text-normal);
+}
+
+.props-framework-suggestions {
+	flex-basis: 100%;
+	z-index: 20;
+	min-width: min(320px, 100%);
+	max-width: 420px;
+	margin-top: 4px;
+	padding: 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	box-shadow: var(--shadow-s);
+}
+
+.props-framework-suggestion-input {
+	width: 100%;
+	margin-bottom: 6px;
+}
+
+.props-framework-suggestion-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 180px;
+	overflow: auto;
+}
+
+.props-framework-suggestion-item {
+	display: flex;
+	justify-content: flex-start;
+	padding: 2px;
+	text-align: left;
+	cursor: var(--cursor);
+}
+
+.props-framework-suggestion-item.props-framework-value-pill {
+	border: 1px solid var(--background-modifier-border);
+	background: var(--props-framework-pill-bg);
+	color: var(--props-framework-pill-color);
+	padding: 4px 10px;
+}
+
+.props-framework-suggestion-item:hover {
+	filter: brightness(1.08);
+}
+
+.props-framework-picker-modal .modal-content {
+	min-width: min(680px, 90vw);
+}
+
+.props-framework-picker-search {
+	width: 100%;
+	margin-bottom: 10px;
+}
+
+.props-framework-icon-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+	gap: 6px;
+	max-height: 420px;
+	overflow: auto;
+}
+
+.props-framework-icon-choice {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	min-height: 64px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	padding: 6px;
+	font-size: var(--font-ui-smaller);
+	cursor: var(--cursor);
+}
+
+.props-framework-icon-choice:hover,
+.props-framework-icon-choice.is-selected {
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+}
+
+.props-framework-icon-choice span {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.props-framework-color-preview {
+	width: 100%;
+	height: 44px;
+	margin-bottom: 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+}
+
+.props-framework-color-input {
+	width: 100%;
+	height: 36px;
+	margin-bottom: 10px;
+}
+
+.props-framework-color-grid {
+	display: grid;
+	grid-template-columns: repeat(9, 1fr);
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+.props-framework-color-choice {
+	aspect-ratio: 1;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	cursor: var(--cursor);
+}
+
+.props-framework-picker-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.props-framework-pill-remove {
+	width: 18px;
+	height: 18px;
+	min-width: 18px;
+	padding: 0;
+}
+
+.props-framework-fallback-icon {
+	color: var(--text-warning);
+}
+
+.props-framework-validation {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	margin-top: 4px;
+	font-size: var(--font-ui-smaller);
+}
+
+.props-framework-validation.is-error {
+	color: var(--text-error);
+}
+
+.props-framework-validation.is-warning {
+	color: var(--text-warning);
+}
+
+.props-framework-validation-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.props-framework-nested {
+	width: 100%;
+}
+
+.props-framework-nested-entries {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+}
+
+.props-framework-nested-row {
+	display: grid;
+	grid-template-columns: minmax(90px, 140px) minmax(160px, 1fr) auto;
+	align-items: start;
+	gap: 6px;
+	padding: 3px 0;
+	border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+
+.props-framework-nested-row.is-array-item {
+	grid-template-columns: minmax(160px, 1fr) auto;
+}
+
+.props-framework-nested-key {
+	color: var(--text-muted);
+	font-size: var(--metadata-label-font-size);
+	line-height: var(--line-height-tight);
+	overflow-wrap: anywhere;
+}
+
+.props-framework-nested-value {
+	min-width: 0;
+}
+
+.props-framework-nested-value input[type="text"],
+.props-framework-nested-value input[type="number"] {
+	width: 100%;
+}
+
+.props-framework-nested-actions {
+	display: flex;
+	justify-content: flex-end;
+}
+
+.props-framework-nested-collapsible.is-collapsed .props-framework-nested-body {
+	display: none;
+}
+
+.props-framework-nested-collapsible.is-collapsed .props-framework-nested-summary > button {
+	transform: rotate(-90deg);
+}
+
+.props-framework-nested-summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--text-muted);
+	cursor: var(--cursor);
+}
+
+.props-framework-nested-type-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.props-framework-nested-body {
+	margin-left: 12px;
+	padding-left: 8px;
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.props-framework-add-property {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.props-framework-add-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border-radius: var(--radius-s);
+}
+
+.props-framework-add-button svg {
+	width: 14px;
+	height: 14px;
+}
+
+.props-framework-kind-select {
+	max-width: 120px;
+}
+
+@media (max-width: 600px) {
+	.props-framework-nested-row {
+		grid-template-columns: 1fr auto;
+	}
+
+	.props-framework-nested-key {
+		grid-column: 1 / -1;
+	}
+}

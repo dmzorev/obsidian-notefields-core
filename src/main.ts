@@ -1,99 +1,197 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Plugin, TFile } from "obsidian";
+import { FrameworkApi, PropertyTypeRegistry } from "./api";
+import { createNestedType } from "./builtins/nested";
+import { createMultiselectType, createSelectType } from "./builtins/select";
+import { ObsidianPropertyAdapter } from "./obsidian-adapter";
+import {
+	DEFAULT_SETTINGS,
+	PropsFrameworkSettingTab,
+	getDefaultConfig,
+	normalizeDefinition,
+	normalizePropertyName,
+} from "./settings";
+import type {
+	FrameworkSettings,
+	PropertyDefinition,
+	PropertyOption,
+	PropsFrameworkApi,
+	SelectPropertyConfig,
+} from "./types";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
-
-	async onload() {
-		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
-	}
-
-	onunload() {
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
+declare module "obsidian" {
+	interface Plugin {
+		api?: PropsFrameworkApi;
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+export default class PropsFrameworkPlugin extends Plugin {
+	settings: FrameworkSettings;
+	api: FrameworkApi;
+	adapter: ObsidianPropertyAdapter | null = null;
+
+	private readonly registry = new PropertyTypeRegistry();
+
+	async onload(): Promise<void> {
+		await this.loadSettings();
+
+		this.api = new FrameworkApi(this, this.registry);
+		this.registerBuiltInTypes();
+
+		this.adapter = new ObsidianPropertyAdapter(this);
+		this.adapter.load();
+
+		this.addSettingTab(new PropsFrameworkSettingTab(this.app, this));
+		this.addCommand({
+			id: "refresh-managed-properties",
+			name: "Refresh managed properties",
+			callback: () => this.adapter?.reloadAllProperties(),
+		});
 	}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+	onunload(): void {
+		this.adapter?.unload();
+		this.adapter = null;
 	}
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+	async loadSettings(): Promise<void> {
+		const data = ((await this.loadData()) ?? {}) as Partial<FrameworkSettings>;
+		const properties = data.properties ?? {};
+
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...data,
+			properties: Object.fromEntries(
+				Object.entries(properties)
+					.map(([key, definition]) => {
+						const normalized = normalizeDefinition({
+							...definition,
+							property: definition.property || key,
+						});
+						return [normalizePropertyName(normalized.property), normalized];
+					})
+			),
+		};
 	}
+
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
+	}
+
+	collectOptions(propertyName: string, sourceFile?: TFile | null): PropertyOption[] {
+		void sourceFile;
+		const definition = this.api.getPropertyDefinition(propertyName);
+		if (!definition || (definition.typeId !== "framework:select" && definition.typeId !== "framework:multiselect")) {
+			return [];
+		}
+
+		const config = definition.config as SelectPropertyConfig;
+		const options: PropertyOption[] = [];
+
+		if (config.optionSource === "manual" || config.optionSource === "manual-and-vault") {
+			options.push(...config.options);
+		}
+
+		if (config.optionSource === "vault" || config.optionSource === "manual-and-vault") {
+			options.push(...this.collectVaultOptions(definition.property));
+		}
+
+		const seen = new Set<string>();
+		return options.filter((option) => {
+			if (!option.value || seen.has(option.value)) {
+				return false;
+			}
+			seen.add(option.value);
+			return true;
+		});
+	}
+
+	ensurePropertyDefinition(propertyName: string, typeId: string): PropertyDefinition {
+		const existing = this.api.getPropertyDefinition(propertyName);
+		if (existing?.typeId === typeId) {
+			return existing;
+		}
+
+		const type = this.api.getRegisteredType(typeId);
+		const definition = normalizeDefinition({
+			...(existing ?? {}),
+			property: propertyName,
+			typeId,
+			config: cloneConfig(type?.defaultConfig ?? getDefaultConfig(typeId)),
+		});
+
+		this.settings.properties[normalizePropertyName(propertyName)] = definition;
+		void this.saveSettings();
+		return definition;
+	}
+
+	ensureDisplayDefinition(propertyName: string): PropertyDefinition {
+		const existing = this.api.getPropertyDefinition(propertyName);
+		if (existing) {
+			return existing;
+		}
+
+		const definition = normalizeDefinition({
+			property: propertyName,
+			typeId: "framework:display",
+			config: {},
+		});
+
+		this.settings.properties[normalizePropertyName(propertyName)] = definition;
+		void this.saveSettings();
+		return definition;
+	}
+
+	private registerBuiltInTypes(): void {
+		const resolveOptions = (propertyName: string): PropertyOption[] => this.collectOptions(propertyName);
+
+		this.registry.register({
+			...createSelectType(resolveOptions),
+			ownerPluginId: this.manifest.id,
+		});
+		this.registry.register({
+			...createMultiselectType(resolveOptions),
+			ownerPluginId: this.manifest.id,
+		});
+		this.registry.register({
+			...createNestedType(),
+			ownerPluginId: this.manifest.id,
+		});
+	}
+
+	private collectVaultOptions(propertyName: string): PropertyOption[] {
+		const values = new Set<string>();
+
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+			if (!frontmatter) {
+				continue;
+			}
+
+			const value = frontmatter[propertyName];
+			if (Array.isArray(value)) {
+				for (const item of value) {
+					if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+						values.add(String(item));
+					}
+				}
+				continue;
+			}
+
+			if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+				values.add(String(value));
+			}
+		}
+
+		return Array.from(values)
+			.sort((a, b) => a.localeCompare(b))
+			.map((value) => ({ value }));
+	}
+}
+
+function cloneConfig<T>(config: T): T {
+	if (config === null || typeof config !== "object") {
+		return config;
+	}
+
+	return JSON.parse(JSON.stringify(config)) as T;
 }

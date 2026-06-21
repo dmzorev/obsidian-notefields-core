@@ -1,90 +1,72 @@
-# Obsidian Sample Plugin
+# Properties Framework
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+Properties Framework is an Obsidian plugin prototype for richer note property types.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+The value itself stays in note frontmatter. The plugin adds a registry that maps a
+property name to a richer type definition with custom rendering, editing,
+normalization and validation.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## Prototype scope
 
-## First time developing plugins?
+- Global property definitions by property name.
+- Built-in `select`, `multiselect` and schema-less `nested object` types.
+- Manual select options and options collected from existing notes.
+- Built-in Obsidian icon ids for managed properties.
+- Public `plugin.api` for other plugins to register property types.
+- Automatic framework definition creation when a framework type is selected
+  from the note property type menu.
+- Inline property menu actions for icon, displayed title and type settings.
 
-Quick starting guide for new plugin devs:
+Bases integration, per-folder overrides, external icon packs, media property
+blocks, banners and covers are intentionally outside the first prototype.
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+## External plugin API
 
-## Releasing new releases
+Other plugins can read the API from the enabled plugin instance:
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+```ts
+const framework = this.app.plugins.getPlugin("obsidian-props-framework")?.api;
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+const handle = framework?.registerType({
+  id: "my-plugin:rating",
+  ownerPluginId: this.manifest.id,
+  name: "Rating",
+  icon: "lucide-star",
+  defaultConfig: { max: 5 },
+  validate(value) {
+    return typeof value === "number"
+      ? true
+      : "Expected a number.";
+  },
+  render(el, ctx) {
+    el.empty();
+    const input = el.createEl("input", {
+      attr: { type: "number", min: "0", max: String(ctx.config.max) },
+      value: String(ctx.value ?? 0),
+    });
+    input.addEventListener("change", () => ctx.onChange(Number(input.value)));
+    return { type: "my-plugin:rating", focus: () => input.focus() };
+  },
+});
 
-## Adding your plugin to the community plugin list
+this.register(() => handle?.dispose());
+```
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+`validate` can return `true`, `false`, a string error message, or a structured
+result:
 
-## How to use
-
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
+```ts
 {
-    "fundingUrl": "https://buymeacoffee.com"
+  valid: false,
+  message: "Expected one of the configured options.",
+  severity: "error",
+  details: ["todo", "doing", "done"]
 }
 ```
 
-If you have multiple URLs, you can also do:
+## Development
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
+```bash
+npm install
+npm run build
 ```
-
-## API Documentation
-
-See https://docs.obsidian.md
