@@ -2,6 +2,7 @@ import { MarkdownView, Menu, Modal, Setting, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
 import type { PropertyDefinition, PropertyWidgetComponent } from "./types";
 import { normalizeValidationResult } from "./types";
+import { showTypeMenu } from "./type-menu";
 import { bindDebouncedInput, renderValidation } from "./ui";
 
 interface ObsidianPropertyRenderContext {
@@ -42,17 +43,13 @@ export interface PropertyTypeChoice {
 	isFramework: boolean;
 }
 
-const BUILTIN_WIDGET_IDS = [
-	"notefields:select",
-	"notefields:multiselect",
-	"notefields:nested",
-] as const;
-
 export class ObsidianPropertyAdapter {
 	private metadataTypeManager: MetadataTypeManagerLike | null = null;
 	private originalGetTypeInfo: MetadataTypeManagerLike["getTypeInfo"] | null = null;
+	private originalSetType: MetadataTypeManagerLike["setType"] | null = null;
 	private originalShowAtMouseEvent: ((event: MouseEvent) => Menu) | null = null;
-	private originalWidgets = new Map<string, ObsidianPropertyWidget | undefined>();
+	private isApplyingType = false;
+	private originalWidgetDescriptors = new Map<string, PropertyDescriptor | undefined>();
 	private originalWidgetRenders = new Map<ObsidianPropertyWidget, ObsidianPropertyWidget["render"]>();
 
 	constructor(private readonly plugin: NoteFieldsCorePlugin) {}
@@ -68,6 +65,7 @@ export class ObsidianPropertyAdapter {
 		}
 
 		this.registerWidgets();
+		this.patchSetType();
 		this.decorateWidgets();
 		this.patchGetTypeInfo();
 		this.patchPropertyMenu();
@@ -83,15 +81,18 @@ export class ObsidianPropertyAdapter {
 			this.metadataTypeManager.getTypeInfo = this.originalGetTypeInfo;
 			this.originalGetTypeInfo = null;
 		}
+		if (this.originalSetType) {
+			this.metadataTypeManager.setType = this.originalSetType;
+			this.originalSetType = null;
+		}
 		if (this.originalShowAtMouseEvent) {
 			Menu.prototype.showAtMouseEvent = this.originalShowAtMouseEvent;
 			this.originalShowAtMouseEvent = null;
 		}
 
-		for (const widgetId of BUILTIN_WIDGET_IDS) {
-			const originalWidget = this.originalWidgets.get(widgetId);
-			if (originalWidget) {
-				this.metadataTypeManager.registeredTypeWidgets[widgetId] = originalWidget;
+		for (const [widgetId, descriptor] of this.originalWidgetDescriptors) {
+			if (descriptor) {
+				Object.defineProperty(this.metadataTypeManager.registeredTypeWidgets, widgetId, descriptor);
 			} else {
 				delete this.metadataTypeManager.registeredTypeWidgets[widgetId];
 			}
@@ -99,7 +100,7 @@ export class ObsidianPropertyAdapter {
 		for (const [widget, render] of this.originalWidgetRenders) {
 			widget.render = render;
 		}
-		this.originalWidgets.clear();
+		this.originalWidgetDescriptors.clear();
 		this.originalWidgetRenders.clear();
 		this.reloadAllProperties();
 	}
@@ -124,10 +125,20 @@ export class ObsidianPropertyAdapter {
 		}
 	}
 
-	getPropertyTypeChoices(propertyName: string): PropertyTypeChoice[] {
-		const widgets = Object.values(this.metadataTypeManager?.registeredTypeWidgets ?? {});
+	getPropertyTypeChoices(propertyName: string, includeHidden = false): PropertyTypeChoice[] {
+		const registeredWidgets = this.metadataTypeManager?.registeredTypeWidgets ?? {};
+		const widgets = includeHidden
+			? [
+				...Object.values(registeredWidgets),
+				...this.plugin.api.getRegisteredTypes()
+					.map((type) => registeredWidgets[type.id])
+					.filter((widget): widget is ObsidianPropertyWidget => Boolean(widget)),
+			]
+			: Object.values(registeredWidgets);
 		return widgets
 			.filter((widget) => !widget.reservedKeys || widget.reservedKeys.includes(propertyName))
+			.filter((widget) => includeHidden || !this.plugin.api.getRegisteredType(widget.type)
+				|| this.plugin.isPropertyTypeVisible(widget.type))
 			.filter((widget, index, all) => all.findIndex((candidate) => candidate.type === widget.type) === index)
 			.map((widget) => ({
 				id: widget.type,
@@ -146,7 +157,7 @@ export class ObsidianPropertyAdapter {
 			: this.metadataTypeManager?.getAssignedWidget?.(propertyName)
 				?? this.metadataTypeManager?.getTypeInfo?.(propertyName)?.expected?.type
 				?? "text";
-		return this.getPropertyTypeChoices(propertyName).find((choice) => choice.id === typeId) ?? null;
+		return this.getPropertyTypeChoices(propertyName, true).find((choice) => choice.id === typeId) ?? null;
 	}
 
 	async setPropertyType(propertyName: string, typeId: string): Promise<void> {
@@ -155,7 +166,12 @@ export class ObsidianPropertyAdapter {
 			return;
 		}
 
-		this.metadataTypeManager.setType(propertyName, typeId);
+		this.isApplyingType = true;
+		try {
+			this.metadataTypeManager.setType(propertyName, typeId);
+		} finally {
+			this.isApplyingType = false;
+		}
 		const definition = this.plugin.api.getPropertyDefinition(propertyName)
 			?? this.plugin.ensureDisplayDefinition(propertyName);
 		if (choice.isFramework) {
@@ -184,17 +200,89 @@ export class ObsidianPropertyAdapter {
 	}
 
 	private registerWidgets(): void {
-		if (!this.metadataTypeManager?.registeredTypeWidgets) {
+		for (const type of this.plugin.api.getRegisteredTypes()) {
+			this.registerTypeWidget(type.id);
+		}
+	}
+
+	registerTypeWidget(typeId: string): void {
+		const widgets = this.metadataTypeManager?.registeredTypeWidgets;
+		if (!widgets || !this.plugin.api.getRegisteredType(typeId)) {
 			return;
 		}
-
-		for (const widgetId of BUILTIN_WIDGET_IDS) {
-			this.originalWidgets.set(widgetId, this.metadataTypeManager.registeredTypeWidgets[widgetId]);
+		if (!this.originalWidgetDescriptors.has(typeId)) {
+			this.originalWidgetDescriptors.set(typeId, Object.getOwnPropertyDescriptor(widgets, typeId));
 		}
+		Object.defineProperty(widgets, typeId, {
+			configurable: true,
+			enumerable: this.plugin.isPropertyTypeVisible(typeId),
+			value: this.createWidget(typeId),
+			writable: true,
+		});
+	}
 
-		for (const typeId of BUILTIN_WIDGET_IDS) {
-			this.metadataTypeManager.registeredTypeWidgets[typeId] = this.createWidget(typeId);
+	unregisterTypeWidget(typeId: string): void {
+		const widgets = this.metadataTypeManager?.registeredTypeWidgets;
+		if (!widgets || !this.originalWidgetDescriptors.has(typeId)) {
+			return;
 		}
+		const descriptor = this.originalWidgetDescriptors.get(typeId);
+		if (descriptor) {
+			Object.defineProperty(widgets, typeId, descriptor);
+		} else {
+			delete widgets[typeId];
+		}
+		this.originalWidgetDescriptors.delete(typeId);
+	}
+
+	updateTypeMenuVisibility(typeId: string): void {
+		const widgets = this.metadataTypeManager?.registeredTypeWidgets;
+		const widget = widgets?.[typeId];
+		if (!widgets || !widget || !this.plugin.api.getRegisteredType(typeId)) {
+			return;
+		}
+		Object.defineProperty(widgets, typeId, {
+			configurable: true,
+			enumerable: this.plugin.isPropertyTypeVisible(typeId),
+			value: widget,
+			writable: true,
+		});
+	}
+
+	private patchSetType(): void {
+		if (!this.metadataTypeManager?.setType || this.originalSetType) {
+			return;
+		}
+		const manager = this.metadataTypeManager;
+		const setType = manager.setType;
+		if (!setType) {
+			return;
+		}
+		const originalSetType = (propertyName: string, typeId: string): void => setType.call(manager, propertyName, typeId);
+		this.originalSetType = originalSetType;
+		manager.setType = (propertyName, typeId): void => {
+			originalSetType(propertyName, typeId);
+			if (!this.isApplyingType) {
+				this.syncDefinitionForAssignedType(propertyName, typeId);
+			}
+		};
+	}
+
+	private syncDefinitionForAssignedType(propertyName: string, typeId: string): void {
+		if (this.plugin.api.getRegisteredType(typeId)) {
+			this.plugin.ensurePropertyDefinition(propertyName, typeId);
+			return;
+		}
+		const definition = this.plugin.api.getPropertyDefinition(propertyName);
+		if (!definition || definition.typeId === "notefields:display") {
+			return;
+		}
+		this.plugin.settings.properties[propertyName.trim().toLowerCase()] = {
+			...definition,
+			typeId: "notefields:display",
+			config: {},
+		};
+		void this.plugin.saveSettings();
 	}
 
 	private patchGetTypeInfo(): void {
@@ -500,15 +588,21 @@ export class PropertyBasicsModal extends Modal {
 			.setName("Property type")
 			// eslint-disable-next-line obsidianmd/ui/sentence-case -- Obsidian and NoteFields are product names.
 			.setDesc("Use a standard Obsidian type or a type provided by NoteFields.")
-			.addDropdown((dropdown) => {
-				for (const choice of this.plugin.adapter?.getPropertyTypeChoices(definition.property) ?? []) {
-					dropdown.addOption(choice.id, choice.name);
-				}
-				dropdown
-					.setValue(this.plugin.adapter?.getPropertyType(definition.property)?.id ?? definition.typeId)
-					.onChange(async (typeId) => {
-						await this.plugin.adapter?.setPropertyType(definition.property, typeId);
-						definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
+			.addButton((button) => {
+				const current = this.plugin.adapter?.getPropertyType(definition.property);
+				button
+					.setButtonText(current?.name ?? "Text")
+					.setIcon(current?.icon ?? "lucide-text")
+					.onClick((event) => {
+						const choices = (this.plugin.adapter?.getPropertyTypeChoices(definition.property) ?? []).map((choice) => ({
+							...choice,
+							group: choice.isFramework ? "framework" as const : "standard" as const,
+						}));
+						showTypeMenu(event, choices, current?.id ?? "text", async (typeId) => {
+							await this.plugin.adapter?.setPropertyType(definition.property, typeId);
+							definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
+							this.onOpen();
+						});
 					});
 			});
 

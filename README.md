@@ -9,6 +9,7 @@ Use Select, Multiselect, and nested object fields in the Properties view and Obs
 - **Select fields** with searchable options and optional custom values.
 - **Multiselect fields** with colored pills, icons, filtering, and keyboard-friendly editing.
 - **Nested object fields** for schema-less objects and lists, including recursive nesting and inline key editing.
+- **Icon Picker and Color Picker fields** that store simple strings while using reusable icon and color catalogs.
 - **Bases table support** with compact field previews and editors that expand on focus.
 - **Reusable option collections** shared by select, multiselect, and third-party field types.
 - **Reusable icon and color collections** used by NoteFields pickers and exposed to other plugins.
@@ -62,6 +63,8 @@ Click the property icon and use:
 - Obsidian's standard **Property type** menu to change the type.
 
 You can also manage all definitions under **Settings → NoteFields Core**.
+
+Under **Property type menu visibility**, hide registered NoteFields types that you do not want offered for new fields. Hiding a type only removes it from type menus; existing fields using that type continue to render and edit normally.
 
 ### Configure Select and Multiselect
 

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Icon Picker and Color Picker field types backed by reusable option collections.
+- Per-type visibility controls for property type menus without disabling existing fields.
 - Compact nested object previews with focus-to-edit behavior in Obsidian Bases tables.
 - Optional `renderBase` API for field types that need a dedicated Obsidian Bases presentation.
 - Nested preview settings for outer braces and expanded nested values.
@@ -27,6 +29,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Icon Picker and Color Picker values now update immediately after selection.
+- Standard Obsidian type changes now release managed fields from their previous NoteFields renderer.
+- Scalar picker fields now share the same transparent empty and populated presentation.
+- Icon Picker now uses an available built-in icon in settings and type menus.
 - Rapid edits to option labels, aliases, icons and colors no longer overwrite one another with stale collection snapshots.
 - Text option edits are now persisted after a short debounce even when the editor modal closes immediately.
 - Property type controls now include standard Obsidian types alongside NoteFields types.
@@ -40,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- NoteFields type selectors now share one grouped menu implementation where Obsidian allows custom rendering.
 - Plugin settings now use compact property and collection lists with focused editor modals.
 - Creating icon and color collections no longer inserts large editors into the settings page.
 

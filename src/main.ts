@@ -1,6 +1,7 @@
 import { Plugin, TFile } from "obsidian";
 import { NoteFieldsCoreApi, PropertyTypeRegistry } from "./api";
 import { createNestedType } from "./builtins/nested";
+import { createColorPickerType, createIconPickerType } from "./builtins/pickers";
 import { createMultiselectType, createSelectType } from "./builtins/select";
 import { CatalogOptionsService } from "./catalog-options";
 import { ObsidianPropertyAdapter } from "./obsidian-adapter";
@@ -75,7 +76,8 @@ export default class NoteFieldsCorePlugin extends Plugin {
 		this.settings = {
 			...DEFAULT_SETTINGS,
 			...data,
-			dataVersion: 3,
+			dataVersion: 4,
+			propertyTypeMenuVisibility: data.propertyTypeMenuVisibility ?? {},
 			properties: Object.fromEntries(
 				Object.entries(properties)
 					.map(([key, definition]) => {
@@ -123,6 +125,16 @@ export default class NoteFieldsCorePlugin extends Plugin {
 		return result;
 	}
 
+	isPropertyTypeVisible(typeId: string): boolean {
+		return this.settings.propertyTypeMenuVisibility[typeId] !== false;
+	}
+
+	async setPropertyTypeMenuVisibility(typeId: string, visible: boolean): Promise<void> {
+		this.settings.propertyTypeMenuVisibility[typeId] = visible;
+		await this.saveSettings();
+		this.adapter?.updateTypeMenuVisibility(typeId);
+	}
+
 	collectOptions(propertyName: string, sourceFile?: TFile | null): ValueOption[] {
 		void sourceFile;
 		const binding = this.valueOptions.getPropertyBinding(propertyName);
@@ -136,11 +148,19 @@ export default class NoteFieldsCorePlugin extends Plugin {
 		}
 
 		const type = this.api.getRegisteredType(typeId);
+		let config: unknown = cloneConfig(type?.defaultConfig ?? getDefaultConfig(typeId));
+		const previousType = existing ? this.api.getRegisteredType(existing.typeId) : null;
+		if (existing && previousType?.optionSupport && type?.optionSupport) {
+			config = type.optionSupport.setBinding(
+				config,
+				previousType.optionSupport.getBinding(existing.config)
+			);
+		}
 		const definition = normalizeDefinition({
 			...(existing ?? {}),
 			property: propertyName,
 			typeId,
-			config: cloneConfig(type?.defaultConfig ?? getDefaultConfig(typeId)),
+			config,
 		});
 
 		this.settings.properties[normalizePropertyName(propertyName)] = definition;
@@ -186,6 +206,14 @@ export default class NoteFieldsCorePlugin extends Plugin {
 		});
 		this.registry.register({
 			...createNestedType(),
+			ownerPluginId: this.manifest.id,
+		});
+		this.registry.register({
+			...createIconPickerType(this),
+			ownerPluginId: this.manifest.id,
+		});
+		this.registry.register({
+			...createColorPickerType(this),
 			ownerPluginId: this.manifest.id,
 		});
 	}

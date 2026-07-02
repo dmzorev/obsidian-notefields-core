@@ -33,6 +33,7 @@ export interface PropertyRenderContext<TConfig = unknown> {
 export interface PropertyWidgetComponent {
 	type: string;
 	focus?: () => void;
+	setValue?: (value: unknown) => void;
 	destroy?: () => void;
 }
 
@@ -158,10 +159,16 @@ export interface NestedPropertyConfig {
 	basesExpandNestedValues: boolean;
 }
 
+export interface CatalogPickerPropertyConfig {
+	collectionId?: string | null;
+}
+
 export type BuiltInPropertyTypeId =
 	| "notefields:select"
 	| "notefields:multiselect"
-	| "notefields:nested";
+	| "notefields:nested"
+	| "notefields:icon"
+	| "notefields:color";
 
 export interface PropertyDefinition<TConfig = unknown> {
 	property: string;
@@ -183,6 +190,7 @@ export interface NoteFieldsSettings {
 	valueOptionCollections: Record<string, ValueOptionCollection>;
 	iconOptionCollections: Record<string, IconOptionCollection>;
 	colorOptionCollections: Record<string, ColorOptionCollection>;
+	propertyTypeMenuVisibility: Record<PropertyTypeId, boolean>;
 	dataVersion: number;
 }
 

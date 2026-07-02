@@ -1,4 +1,5 @@
-import { Menu, Setting, setIcon } from "obsidian";
+import { Setting, setIcon } from "obsidian";
+import { showTypeMenu } from "../type-menu";
 import type { NestedPropertyConfig, PropertyRenderContext, PropertyType, PropertyWidgetComponent } from "../types";
 import { containMetadataEvents, renderValidation, stopMetadataEvent } from "../ui";
 
@@ -378,19 +379,16 @@ function renderKindButton(parentEl: HTMLElement, value: unknown, onChange: (valu
 	buttonEl.addEventListener("mousedown", stopMetadataEvent);
 	buttonEl.addEventListener("click", (event) => {
 		stopMetadataEvent(event);
-		const menu = new Menu();
-		for (const kind of NESTED_VALUE_KINDS) {
-			menu.addItem((item) => item
-				.setTitle(kind.label)
-				.setIcon(kind.icon)
-				.setChecked(kind.value === currentKind)
-				.onClick(() => {
-					if (kind.value !== currentKind) {
-						onChange(createDefaultValue(kind.value));
-					}
-				}));
-		}
-		menu.showAtMouseEvent(event);
+		showTypeMenu(
+			event,
+			NESTED_VALUE_KINDS.map((kind) => ({ id: kind.value, name: kind.label, icon: kind.icon })),
+			currentKind,
+			(kind) => {
+				if (kind !== currentKind) {
+					onChange(createDefaultValue(kind as NewValueKind));
+				}
+			}
+		);
 	});
 }
 

@@ -149,11 +149,13 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 
 	registerType<TConfig = unknown>(registration: PropertyTypeRegistration<TConfig>): PropertyTypeHandle {
 		const handle = this.registry.register(registration);
+		this.plugin.adapter?.registerTypeWidget(registration.id);
 		this.refresh();
 
 		return {
 			dispose: () => {
 				handle.dispose();
+				this.plugin.adapter?.unregisterTypeWidget(registration.id);
 				this.refresh();
 			},
 		};

@@ -1,4 +1,4 @@
-import { App, Menu, Notice, PluginSettingTab, Setting, setIcon } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
 import { createLocalBinding, isOptionValue, normalizeValueOption, uniqueValueOptions } from "./options";
 import { PropertyBasicsModal, PropertySettingsModal } from "./obsidian-adapter";
@@ -7,7 +7,9 @@ import {
 	OptionCollectionModal,
 	type OptionCollectionKind,
 } from "./settings-modals";
+import { showTypeMenu } from "./type-menu";
 import type {
+	CatalogPickerPropertyConfig,
 	NoteFieldsSettings,
 	NestedPropertyConfig,
 	PropertyDefinition,
@@ -32,20 +34,26 @@ export const DEFAULT_SETTINGS: NoteFieldsSettings = {
 	valueOptionCollections: {},
 	iconOptionCollections: {},
 	colorOptionCollections: {},
-	dataVersion: 3,
+	propertyTypeMenuVisibility: {},
+	dataVersion: 4,
 };
 
 export function normalizePropertyName(propertyName: string): string {
 	return propertyName.trim().toLowerCase();
 }
 
-export function getDefaultConfig(typeId: string): SelectPropertyConfig | NestedPropertyConfig | Record<string, never> {
+export function getDefaultConfig(
+	typeId: string
+): SelectPropertyConfig | NestedPropertyConfig | CatalogPickerPropertyConfig | Record<string, never> {
 	if (typeId === "notefields:select" || typeId === "notefields:multiselect") {
 		return { ...DEFAULT_SELECT_CONFIG, optionBinding: createLocalBinding("string") };
 	}
 
 	if (typeId === "notefields:nested") {
 		return { ...DEFAULT_NESTED_CONFIG };
+	}
+	if (typeId === "notefields:icon" || typeId === "notefields:color") {
+		return { collectionId: null };
 	}
 
 	return {};
@@ -131,6 +139,28 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 		this.renderCollectionGroup(containerEl, "Value collections", "value", "lucide-list-checks");
 		this.renderCollectionGroup(containerEl, "Icon collections", "icon", "lucide-shapes");
 		this.renderCollectionGroup(containerEl, "Color collections", "color", "lucide-palette");
+	
+		new Setting(containerEl)
+			.setName("Property type menu visibility")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case -- NoteFields is a product name.
+			.setDesc("Choose which registered NoteFields types appear in type menus. Existing fields keep working when a type is hidden.")
+			.setHeading();
+		this.renderTypeMenuVisibility(containerEl);
+	}
+
+	private renderTypeMenuVisibility(containerEl: HTMLElement): void {
+		const listEl = containerEl.createDiv({ cls: "props-framework-settings-list" });
+		for (const type of this.plugin.api.getRegisteredTypes()) {
+			new Setting(listEl)
+				.setName(type.name)
+				.setDesc(type.id)
+				.addToggle((toggle) => toggle
+					.setTooltip("Show in property type menus")
+					.setValue(this.plugin.isPropertyTypeVisible(type.id))
+					.onChange(async (visible) => {
+						await this.plugin.setPropertyTypeMenuVisibility(type.id, visible);
+					}));
+		}
 	}
 
 	private renderAddDefinition(containerEl: HTMLElement): void {
@@ -190,20 +220,15 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 	}
 
 	private openPropertyTypeMenu(event: MouseEvent, definition: PropertyDefinition): void {
-		const menu = new Menu();
 		const currentType = this.plugin.adapter?.getPropertyType(definition.property)?.id;
-		for (const choice of this.plugin.adapter?.getPropertyTypeChoices(definition.property) ?? []) {
-			menu.addItem((item) => item
-				.setTitle(choice.name)
-				.setIcon(choice.icon)
-				.setSection(choice.isFramework ? "notefields" : "obsidian")
-				.setChecked(choice.id === currentType)
-				.onClick(async () => {
-					await this.plugin.adapter?.setPropertyType(definition.property, choice.id);
-					this.display();
-				}));
-		}
-		menu.showAtMouseEvent(event);
+		const choices = (this.plugin.adapter?.getPropertyTypeChoices(definition.property) ?? []).map((choice) => ({
+			...choice,
+			group: choice.isFramework ? "framework" as const : "standard" as const,
+		}));
+		showTypeMenu(event, choices, currentType ?? "text", async (typeId) => {
+			await this.plugin.adapter?.setPropertyType(definition.property, typeId);
+			this.display();
+		});
 	}
 
 	private renderCollectionGroup(
