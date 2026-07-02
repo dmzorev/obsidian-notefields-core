@@ -1,5 +1,6 @@
 import { MarkdownView, Menu, Modal, Setting, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
+import { MetadataSurfaceController } from "./metadata-surface";
 import type { PropertyDefinition, PropertyWidgetComponent } from "./types";
 import { normalizeValidationResult } from "./types";
 import { showTypeMenu } from "./type-menu";
@@ -51,8 +52,11 @@ export class ObsidianPropertyAdapter {
 	private isApplyingType = false;
 	private originalWidgetDescriptors = new Map<string, PropertyDescriptor | undefined>();
 	private originalWidgetRenders = new Map<ObsidianPropertyWidget, ObsidianPropertyWidget["render"]>();
+	private readonly metadataSurface: MetadataSurfaceController;
 
-	constructor(private readonly plugin: NoteFieldsCorePlugin) {}
+	constructor(private readonly plugin: NoteFieldsCorePlugin) {
+		this.metadataSurface = new MetadataSurfaceController(plugin);
+	}
 
 	load(): void {
 		this.metadataTypeManager = (this.plugin.app as unknown as {
@@ -69,10 +73,12 @@ export class ObsidianPropertyAdapter {
 		this.decorateWidgets();
 		this.patchGetTypeInfo();
 		this.patchPropertyMenu();
+		this.metadataSurface.load();
 		this.reloadAllProperties();
 	}
 
 	unload(): void {
+		this.metadataSurface.unload();
 		if (!this.metadataTypeManager?.registeredTypeWidgets) {
 			return;
 		}
@@ -123,6 +129,7 @@ export class ObsidianPropertyAdapter {
 				metadataEditor.synchronize(data);
 			}
 		}
+		this.metadataSurface.refreshSoon();
 	}
 
 	getPropertyTypeChoices(propertyName: string, includeHidden = false): PropertyTypeChoice[] {
@@ -353,7 +360,7 @@ export class ObsidianPropertyAdapter {
 				const definition = this.resolveDefinition(typeId, ctx)
 					?? this.plugin.ensurePropertyDefinition(ctx.key, typeId);
 
-				this.refreshPropertyDisplay(el, definition);
+				this.refreshPropertyDisplay(el, definition, value);
 				const type = this.plugin.api.getRegisteredType(definition.typeId);
 				if (!type) {
 					el.empty();
@@ -428,16 +435,19 @@ export class ObsidianPropertyAdapter {
 				const rendered = originalRender.call(widget, el, value, ctx);
 				const definition = this.plugin.api.getPropertyDefinition(ctx.key);
 				if (definition) {
-					this.refreshPropertyDisplay(el, definition);
+					this.refreshPropertyDisplay(el, definition, value);
 				}
 				return rendered;
 			};
 		}
 	}
 
-	private refreshPropertyDisplay(el: HTMLElement, definition: PropertyDefinition): void {
+	private refreshPropertyDisplay(el: HTMLElement, definition: PropertyDefinition, value: unknown): void {
 		const icon = definition.icon ?? this.plugin.api.getRegisteredType(definition.typeId)?.icon;
 		const propertyEl = el.closest(".metadata-property");
+		if (propertyEl instanceof HTMLElement) {
+			this.metadataSurface.decorateProperty(propertyEl, definition, value);
+		}
 
 		const iconEl = propertyEl?.querySelector(".metadata-property-icon");
 		if (iconEl instanceof HTMLElement) {
@@ -646,6 +656,23 @@ export class PropertyBasicsModal extends Modal {
 					definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
 				});
 			});
+
+		new Setting(this.contentEl)
+			.setName("Visibility")
+			.setDesc("Hide this property in note properties, always or only while its value is empty.")
+			.addDropdown((dropdown) => dropdown
+				.addOption("visible", "Visible")
+				.addOption("hidden", "Hidden")
+				.addOption("hidden-when-empty", "Hidden when empty")
+				.setValue(definition.visibility ?? "visible")
+				.onChange(async (visibility) => {
+					await this.plugin.api.patchPropertyDefinition(definition.property, {
+						visibility: visibility === "hidden" || visibility === "hidden-when-empty"
+							? visibility
+							: "visible",
+					});
+					definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
+				}));
 	}
 
 	onClose(): void {

@@ -29,8 +29,11 @@ Open **Display** from the property menu to configure:
 - **Property name**: the real YAML key.
 - **Displayed title**: an optional label shown in the UI.
 - **Icon**: a built-in Obsidian icon shown beside the property.
+- **Visibility**: keep the property visible, always hide it, or hide it only while empty.
 
 Changing the displayed title does not rename the YAML key. Renaming the property name updates the actual property while preserving its NoteFields definition.
+
+Hidden properties stay in frontmatter. Use the eye button in the Properties heading to reveal them temporarily in the current note. Source mode continues to show the complete YAML, and this setting does not hide columns in Bases.
 
 ## Property settings
 

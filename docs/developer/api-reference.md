@@ -23,6 +23,8 @@ The public type surface is exported from `src/public-api.ts`. The runtime object
 | `registerType(registration)` | Registers a type and returns a disposable handle. |
 | `validateValue(name, value)` | Validates a value using the property's current type. |
 
+`PropertyDefinition.visibility` accepts `visible`, `hidden`, or `hidden-when-empty`. It controls note Properties presentation only; it does not remove frontmatter or hide Bases columns. The field is optional for API compatibility and defaults to `visible` during normalization.
+
 ## Value options
 
 | Method | Description |

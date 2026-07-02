@@ -92,8 +92,13 @@ export function normalizeDefinition(definition: PropertyDefinition): PropertyDef
 		...definition,
 		property: definition.property.trim(),
 		typeId,
+		visibility: normalizePropertyVisibility(definition.visibility),
 		config,
 	};
+}
+
+function normalizePropertyVisibility(value: unknown): PropertyDefinition["visibility"] {
+	return value === "hidden" || value === "hidden-when-empty" ? value : "visible";
 }
 
 function isStoredValueOption(option: unknown): option is { value: string | number | boolean } {

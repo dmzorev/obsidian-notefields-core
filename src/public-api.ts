@@ -23,6 +23,7 @@ export type {
 	PropertyTypeRegistration,
 	PropertyValidationResult,
 	PropertyValidationReturn,
+	PropertyVisibility,
 	PropertyWidgetComponent,
 	ValueOption,
 	ValueOptionBinding,

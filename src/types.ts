@@ -170,11 +170,14 @@ export type BuiltInPropertyTypeId =
 	| "notefields:icon"
 	| "notefields:color";
 
+export type PropertyVisibility = "visible" | "hidden" | "hidden-when-empty";
+
 export interface PropertyDefinition<TConfig = unknown> {
 	property: string;
 	typeId: PropertyTypeId;
 	icon?: string;
 	displayTitle?: string;
+	visibility?: PropertyVisibility;
 	config: TConfig;
 }
 

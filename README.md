@@ -19,6 +19,7 @@ Use it to:
 - assign several values with a compact **Multiselect** field;
 - edit objects and lists with recursive **Nested fields**;
 - choose built-in Obsidian icons and reusable colors;
+- hide internal properties until you choose to reveal them;
 - reuse the same option set across multiple properties;
 - work with the same rich fields in notes and Bases tables.
 
@@ -85,6 +86,8 @@ Capture a Bases table with Select, Multiselect, Nested, Icon, and Color columns 
 4. Use **Property settings** to configure options and behavior.
 
 Definitions are matched globally by property name within the vault. Once `status` is configured as a Select field, every `status` property uses the same field definition.
+
+Open **Display** to keep an internal property hidden or hide it only while empty. A small eye button in the Properties heading reveals hidden rows without changing their YAML values. Hidden properties remain visible in Source mode and are not removed from notes.
 
 For a more detailed walkthrough, see the [Getting started guide](docs/getting-started.md).
 

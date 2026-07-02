@@ -889,6 +889,46 @@ button.props-framework-add-button:hover {
 	outline: none;
 }
 
+.metadata-container:not(.notefields-show-hidden-properties)
+	.metadata-property.notefields-property-hidden {
+	display: none;
+}
+
+.metadata-container.notefields-show-hidden-properties
+	.metadata-property.notefields-property-hidden {
+	opacity: 0.62;
+}
+
+button.notefields-hidden-properties-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	width: auto;
+	min-width: var(--clickable-icon-size);
+	height: var(--clickable-icon-size);
+	margin-inline-start: 4px;
+	padding: 0 5px;
+	color: var(--text-muted);
+	vertical-align: middle;
+}
+
+.notefields-hidden-properties-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.notefields-hidden-properties-icon svg {
+	width: 15px;
+	height: 15px;
+}
+
+.notefields-hidden-properties-count {
+	min-width: 1ch;
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+
 @media (max-width: 600px) {
 	.props-framework-nested-row {
 		grid-template-columns: 1fr auto;
