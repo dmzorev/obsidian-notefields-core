@@ -8,6 +8,79 @@
 	font-size: var(--font-ui-medium);
 }
 
+.props-framework-settings-list {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	overflow: hidden;
+}
+
+.props-framework-settings-row {
+	display: grid;
+	grid-template-columns: 36px minmax(0, 1fr) auto;
+	align-items: center;
+	min-height: 52px;
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.props-framework-settings-row:last-child {
+	border-bottom: 0;
+}
+
+.props-framework-list-icon {
+	width: 32px;
+	height: 32px;
+}
+
+.props-framework-list-summary {
+	display: block;
+	min-width: 0;
+	padding: 4px 8px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	text-align: left;
+	color: var(--text-normal);
+}
+
+.props-framework-list-summary:hover {
+	background: transparent;
+	box-shadow: none;
+}
+
+.props-framework-list-title,
+.props-framework-list-subtitle {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.props-framework-list-title {
+	font-weight: var(--font-medium);
+}
+
+.props-framework-list-subtitle {
+	margin-top: 1px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.props-framework-list-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.props-framework-list-actions .is-warning:hover {
+	color: var(--text-error);
+}
+
+.props-framework-settings-empty {
+	padding: 14px 16px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
 .props-framework-empty {
 	margin-top: 12px;
 	color: var(--text-muted);
@@ -48,6 +121,33 @@
 	width: auto;
 }
 
+.props-framework-catalog-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 8px 0 10px;
+}
+
+.props-framework-catalog-editor-row {
+	display: grid;
+	grid-template-columns: auto minmax(120px, 0.8fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+}
+
+.props-framework-inline-color-picker .setting-item {
+	border: 0;
+	padding: 0;
+}
+
+.props-framework-inline-color-picker .setting-item-info {
+	display: none;
+}
+
+.props-framework-color-value-input {
+	border-left: 5px solid var(--props-framework-option-color);
+}
+
 @media (max-width: 700px) {
 	.props-framework-option-editor-main,
 	.props-framework-option-editor-main.is-multi-type {
@@ -60,6 +160,14 @@
 
 	.props-framework-option-aliases {
 		grid-column: span 2;
+	}
+
+	.props-framework-catalog-editor-row {
+		grid-template-columns: auto minmax(100px, 1fr) minmax(100px, 1fr) auto;
+	}
+
+	.props-framework-catalog-editor-row input:nth-of-type(3) {
+		grid-column: 2 / span 2;
 	}
 }
 
@@ -360,8 +468,25 @@ button.props-framework-value-pill {
 	filter: brightness(1.08);
 }
 
-.props-framework-picker-modal .modal-content {
-	min-width: min(680px, 90vw);
+.props-framework-picker-modal,
+.props-framework-editor-modal {
+	width: min(860px, calc(100vw - 32px));
+	max-width: calc(100vw - 32px);
+	max-height: calc(100vh - 32px);
+}
+
+.props-framework-small-modal {
+	width: min(520px, calc(100vw - 32px));
+	max-width: calc(100vw - 32px);
+}
+
+.props-framework-picker-modal .modal-content,
+.props-framework-editor-modal .modal-content,
+.props-framework-small-modal .modal-content {
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: hidden;
+	overflow-y: auto;
 }
 
 .props-framework-picker-search {
@@ -371,9 +496,9 @@ button.props-framework-value-pill {
 
 .props-framework-icon-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
 	gap: 6px;
-	max-height: 420px;
+	max-height: min(420px, 52vh);
 	overflow: auto;
 }
 
@@ -421,16 +546,21 @@ button.props-framework-value-pill {
 
 .props-framework-color-grid {
 	display: grid;
-	grid-template-columns: repeat(9, 1fr);
+	grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
 	gap: 6px;
 	margin-bottom: 12px;
 }
 
 .props-framework-color-choice {
 	aspect-ratio: 1;
+	min-width: 32px;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 999px;
 	cursor: var(--cursor);
+}
+
+.props-framework-color-choice.is-selected {
+	box-shadow: 0 0 0 2px var(--interactive-accent);
 }
 
 .props-framework-picker-actions {
@@ -438,6 +568,29 @@ button.props-framework-value-pill {
 	justify-content: flex-end;
 	gap: 8px;
 	margin-top: 10px;
+}
+
+@media (max-width: 520px) {
+	.props-framework-picker-modal,
+	.props-framework-editor-modal,
+	.props-framework-small-modal {
+		width: calc(100vw - 16px);
+		max-width: calc(100vw - 16px);
+		max-height: calc(100vh - 16px);
+	}
+
+	.props-framework-settings-row {
+		grid-template-columns: 32px minmax(0, 1fr) auto;
+		padding-inline: 4px;
+	}
+
+	.props-framework-list-actions button:not(:last-child) {
+		display: none;
+	}
+
+	.props-framework-icon-grid {
+		grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+	}
 }
 
 .props-framework-pill-remove {

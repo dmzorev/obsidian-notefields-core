@@ -1,6 +1,5 @@
 import { Notice, Setting, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
-import { ColorPickerModal, IconPickerModal } from "./pickers";
 import {
 	cloneBinding,
 	coerceOptionValue,
@@ -292,10 +291,10 @@ function renderOptionRow(
 	setIcon(iconButton, option.icon || "lucide-plus");
 	iconButton.disabled = Boolean(collection?.readonly);
 	iconButton.addEventListener("click", () => {
-		new IconPickerModal(plugin.app, option.icon ?? null, async (icon) => {
+		plugin.api.openIconPicker(option.icon ?? null, async (icon) => {
 			await patchOption(plugin, context, binding, collection, valueType, values, option.id, { icon: icon ?? undefined });
 			rerender(plugin, parentEl.parentElement ?? parentEl, context, editorOptions);
-		}).open();
+		});
 	});
 
 	const colorButton = controlsEl.createEl("button", {
@@ -305,10 +304,10 @@ function renderOptionRow(
 	colorButton.style.backgroundColor = option.color ? optionColorToCss(option.color) : "transparent";
 	colorButton.disabled = Boolean(collection?.readonly);
 	colorButton.addEventListener("click", () => {
-		new ColorPickerModal(plugin.app, option.color ?? null, async (color) => {
+		plugin.api.openColorPicker(option.color ?? null, async (color) => {
 			await patchOption(plugin, context, binding, collection, valueType, values, option.id, { color: color ?? undefined });
 			rerender(plugin, parentEl.parentElement ?? parentEl, context, editorOptions);
-		}).open();
+		});
 	});
 
 	const deleteButton = controlsEl.createEl("button", {

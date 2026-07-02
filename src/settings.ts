@@ -1,8 +1,12 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Menu, Notice, PluginSettingTab, Setting, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
 import { createLocalBinding, isOptionValue, normalizeValueOption, uniqueValueOptions } from "./options";
-import { renderValueOptionsEditor } from "./options-editor";
-import { IconPickerModal } from "./pickers";
+import { PropertyBasicsModal, PropertySettingsModal } from "./obsidian-adapter";
+import {
+	CreateOptionCollectionModal,
+	OptionCollectionModal,
+	type OptionCollectionKind,
+} from "./settings-modals";
 import type {
 	NoteFieldsSettings,
 	NestedPropertyConfig,
@@ -26,7 +30,9 @@ export const DEFAULT_NESTED_CONFIG: NestedPropertyConfig = {
 export const DEFAULT_SETTINGS: NoteFieldsSettings = {
 	properties: {},
 	valueOptionCollections: {},
-	dataVersion: 2,
+	iconOptionCollections: {},
+	colorOptionCollections: {},
+	dataVersion: 3,
 };
 
 export function normalizePropertyName(propertyName: string): string {
@@ -101,106 +107,37 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 		containerEl.addClass("props-framework-settings");
 
 		new Setting(containerEl)
-			.setName("Option collections")
-			.setDesc("Create reusable value sets for select, multiselect and third-party field types.")
-			.setHeading();
-
-		this.renderValueCollections(containerEl);
-
-		new Setting(containerEl)
 			.setName("Managed properties")
-			.setDesc("Assign richer property types to note properties. The frontmatter value stays in the note; display, editing and validation live here.")
+			.setDesc("Rich display and editing behavior for note properties.")
 			.setHeading();
-
 		this.renderAddDefinition(containerEl);
 
 		const definitions = Object.values(this.plugin.settings.properties)
+			.filter((definition) => Boolean(definition.property.trim()))
 			.sort((a, b) => a.property.localeCompare(b.property));
-
+		const propertyListEl = containerEl.createDiv({ cls: "props-framework-settings-list" });
 		if (definitions.length === 0) {
-			containerEl.createDiv({
-				cls: "props-framework-empty",
-				text: "No managed properties yet.",
-			});
-			return;
-		}
-
-		for (const definition of definitions) {
-			this.renderDefinition(containerEl, definition);
-		}
-	}
-
-	private renderValueCollections(containerEl: HTMLElement): void {
-		let collectionName = "";
-		new Setting(containerEl)
-			.setName("New collection")
-			.setDesc("Collections can be shared by any number of properties and plugins.")
-			.addText((text) => text
-				.setPlaceholder("Statuses")
-				.onChange((value) => {
-					collectionName = value;
-				}))
-			.addButton((button) => button
-				.setButtonText("Create")
-				.setCta()
-				.onClick(async () => {
-					const name = collectionName.trim();
-					if (!name) {
-						return;
-					}
-					await this.plugin.api.createValueOptionCollection({ name });
-					this.display();
-				}));
-
-		for (const collection of this.plugin.api.getValueOptionCollections()) {
-			const sectionEl = containerEl.createDiv({
-				cls: ["props-framework-definition", "props-framework-collection"],
-			});
-			new Setting(sectionEl)
-				.setName(collection.name)
-				.setDesc(`${collection.options.length} value${collection.options.length === 1 ? "" : "s"}`)
-				.setHeading();
-
-			new Setting(sectionEl)
-				.setName("Collection name")
-				.addText((text) => text
-					.setValue(collection.name)
-					.setDisabled(Boolean(collection.readonly))
-					.onChange(async (name) => {
-						const normalized = name.trim();
-						if (normalized && normalized !== collection.name) {
-							await this.plugin.api.updateValueOptionCollection({ ...collection, name: normalized });
-						}
-					}));
-
-			renderValueOptionsEditor(this.plugin, sectionEl, {
-				binding: { mode: "shared", collectionId: collection.id },
-				onChange: async () => undefined,
-			}, { showBinding: false, showCollect: false });
-
-			if (!collection.readonly) {
-				new Setting(sectionEl)
-					.addButton((button) => button
-						.setButtonText("Remove collection")
-						.setWarning()
-						.onClick(async () => {
-							const removed = await this.plugin.api.removeValueOptionCollection(collection.id);
-							if (!removed) {
-								new Notice("This collection is still used by one or more properties.");
-								return;
-							}
-							this.display();
-						}));
+			this.renderEmpty(propertyListEl, "No managed properties yet.");
+		} else {
+			for (const definition of definitions) {
+				this.renderDefinitionRow(propertyListEl, definition);
 			}
 		}
+
+		new Setting(containerEl)
+			.setName("Option collections")
+			.setDesc("Reusable values, icons and colors shared by fields and plugins.")
+			.setHeading();
+		this.renderCollectionGroup(containerEl, "Value collections", "value", "lucide-list-checks");
+		this.renderCollectionGroup(containerEl, "Icon collections", "icon", "lucide-shapes");
+		this.renderCollectionGroup(containerEl, "Color collections", "color", "lucide-palette");
 	}
 
 	private renderAddDefinition(containerEl: HTMLElement): void {
 		let propertyName = "";
 
 		new Setting(containerEl)
-			.setName("Add managed property")
-			.setDesc("Start with a property name. You can change the type after it is added.")
+			.setName("Add property")
 			.addText((text) => text
 				// eslint-disable-next-line obsidianmd/ui/sentence-case -- Property names are literal examples.
 				.setPlaceholder("status")
@@ -218,129 +155,160 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 
 					await this.plugin.api.setPropertyDefinition({
 						property,
-						typeId: "notefields:select",
-						config: getDefaultConfig("notefields:select"),
+						typeId: "notefields:display",
+						config: {},
 					});
 					this.display();
+					new PropertyBasicsModal(this.plugin, property).open();
 				}));
 	}
 
-	private renderDefinition(containerEl: HTMLElement, definition: PropertyDefinition): void {
-		const sectionEl = containerEl.createDiv({ cls: "props-framework-definition" });
-		new Setting(sectionEl)
-			.setName(definition.property)
-			.setHeading();
+	private renderDefinitionRow(parentEl: HTMLElement, definition: PropertyDefinition): void {
+		const type = this.plugin.adapter?.getPropertyType(definition.property);
+		const rowEl = this.createListRow(
+			parentEl,
+			type?.icon ?? "lucide-file-question",
+			`Property type: ${type?.name ?? "Text"}`,
+			(event) => this.openPropertyTypeMenu(event, definition)
+		);
 
-		this.renderPropertyNameInput(sectionEl, definition);
-
-		new Setting(sectionEl)
-			.setName("Type")
-			.addDropdown((dropdown) => {
-				for (const type of this.plugin.api.getRegisteredTypes()) {
-					dropdown.addOption(type.id, type.name);
-				}
-				dropdown
-					.setValue(definition.typeId)
-					.onChange(async (typeId) => {
-						await this.plugin.api.setPropertyDefinition({
-							...definition,
-							typeId,
-							config: getDefaultConfig(typeId),
-						});
-						this.display();
-					});
-			});
-
-		new Setting(sectionEl)
-			.setName("Displayed title")
-			.setDesc("Optional label shown in the note properties UI.")
-			.addText((text) => text
-				.setPlaceholder(definition.property)
-				.setValue(definition.displayTitle ?? "")
-				.onChange(async (value) => {
-					await this.plugin.api.setPropertyDefinition({
-						...definition,
-						displayTitle: value.trim() || undefined,
-					});
-				}));
-
-		this.renderIconInput(sectionEl, definition.icon ?? "", async (icon) => {
-			await this.plugin.api.setPropertyDefinition({
-				...definition,
-				icon: icon || undefined,
-			});
-			this.display();
-		}, "Icon");
-
-		const type = this.plugin.api.getRegisteredType(definition.typeId);
-		type?.renderSettings?.(sectionEl, {
-			app: this.app,
-			definition,
-			getDefinition: () => this.plugin.api.getPropertyDefinition(definition.property) ?? definition,
-			updateDefinition: async (nextDefinition) => {
-				await this.plugin.api.setPropertyDefinition(nextDefinition);
-			},
+		this.renderListSummary(rowEl, definition.displayTitle?.trim() || definition.property, definition.property, () => {
+			new PropertyBasicsModal(this.plugin, definition.property).open();
 		});
+		const actionsEl = rowEl.createDiv({ cls: "props-framework-list-actions" });
+		this.createActionButton(actionsEl, "lucide-pencil", "Edit property", () => {
+			new PropertyBasicsModal(this.plugin, definition.property).open();
+		});
+		if (this.plugin.api.getRegisteredType(definition.typeId)?.renderSettings) {
+			this.createActionButton(actionsEl, "lucide-sliders-horizontal", "Property settings", () => {
+				new PropertySettingsModal(this.plugin, definition.property).open();
+			});
+		}
+		this.createActionButton(actionsEl, "lucide-trash-2", "Remove property", () => {
+			void this.plugin.api.removePropertyDefinition(definition.property).then(() => this.display());
+		}, true);
+	}
 
-		new Setting(sectionEl)
-			.addButton((button) => button
-				.setButtonText("Remove")
-				.setWarning()
+	private openPropertyTypeMenu(event: MouseEvent, definition: PropertyDefinition): void {
+		const menu = new Menu();
+		const currentType = this.plugin.adapter?.getPropertyType(definition.property)?.id;
+		for (const choice of this.plugin.adapter?.getPropertyTypeChoices(definition.property) ?? []) {
+			menu.addItem((item) => item
+				.setTitle(choice.name)
+				.setIcon(choice.icon)
+				.setSection(choice.isFramework ? "notefields" : "obsidian")
+				.setChecked(choice.id === currentType)
 				.onClick(async () => {
-					await this.plugin.api.removePropertyDefinition(definition.property);
+					await this.plugin.adapter?.setPropertyType(definition.property, choice.id);
 					this.display();
 				}));
+		}
+		menu.showAtMouseEvent(event);
 	}
 
-	private renderPropertyNameInput(sectionEl: HTMLElement, definition: PropertyDefinition): void {
-		new Setting(sectionEl)
-			.setName("Property name")
-			.setDesc("Framework definition key. Keep it equal to the real note property name.")
-			.addText((text) => {
-				text
-					.setPlaceholder(definition.property)
-					.setValue(definition.property);
-				text.inputEl.addEventListener("change", () => {
-					const property = text.inputEl.value.trim();
-					if (!property || property === definition.property) {
-						text.setValue(definition.property);
-						return;
-					}
-					void this.plugin.api.removePropertyDefinition(definition.property)
-						.then(() => this.plugin.api.setPropertyDefinition({
-							...definition,
-							property,
-						}))
-						.then(() => this.display());
-				});
-			});
-	}
-
-	private renderIconInput(
-		parentEl: HTMLElement,
-		value: string,
-		onChange: (icon: string) => Promise<void>,
-		name: string
+	private renderCollectionGroup(
+		containerEl: HTMLElement,
+		name: string,
+		kind: OptionCollectionKind,
+		icon: string
 	): void {
-		new Setting(parentEl)
+		new Setting(containerEl)
 			.setName(name)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case -- Icon ids are literal examples.
-			.setDesc("Use a built-in icon id, for example lucide-list-check.")
-			.addText((text) => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case -- Icon ids are literal examples.
-				.setPlaceholder("lucide-list-check")
-				.setValue(value)
-				.onChange(async (nextValue) => {
-					await onChange(nextValue.trim());
-				}))
+			.setHeading()
 			.addExtraButton((button) => button
-				.setIcon("lucide-search")
-				.setTooltip("Choose icon")
-				.onClick(() => {
-					new IconPickerModal(this.app, value || null, async (icon) => {
-						await onChange(icon ?? "");
-					}).open();
-				}));
+				.setIcon("lucide-plus")
+				.setTooltip(`Add ${kind} collection`)
+				.onClick(() => new CreateOptionCollectionModal(this.plugin, kind, () => this.display()).open()));
+		const listEl = containerEl.createDiv({ cls: "props-framework-settings-list" });
+		const collections = kind === "value"
+			? this.plugin.api.getValueOptionCollections()
+			: kind === "icon"
+				? this.plugin.api.getIconOptionCollections()
+				: this.plugin.api.getColorOptionCollections();
+		if (collections.length === 0) {
+			this.renderEmpty(listEl, `No ${kind} collections yet.`);
+			return;
+		}
+		for (const collection of collections) {
+			const open = (): void => new OptionCollectionModal(this.plugin, kind, collection.id).open();
+			const rowEl = this.createListRow(listEl, icon, `Edit ${collection.name}`, () => open());
+			this.renderListSummary(
+				rowEl,
+				collection.name,
+				`${collection.options.length} ${kind}${collection.options.length === 1 ? "" : "s"}`,
+				open
+			);
+			const actionsEl = rowEl.createDiv({ cls: "props-framework-list-actions" });
+			this.createActionButton(actionsEl, "lucide-pencil", "Edit collection", open);
+			if (!collection.readonly) {
+				this.createActionButton(actionsEl, "lucide-trash-2", "Remove collection", () => {
+					void this.removeCollection(kind, collection.id);
+				}, true);
+			}
+		}
+	}
+
+	private async removeCollection(kind: OptionCollectionKind, id: string): Promise<void> {
+		const removed = kind === "value"
+			? await this.plugin.api.removeValueOptionCollection(id)
+			: kind === "icon"
+				? await this.plugin.api.removeIconOptionCollection(id)
+				: await this.plugin.api.removeColorOptionCollection(id);
+		if (!removed) {
+			new Notice("This collection is still in use or cannot be removed.");
+			return;
+		}
+		this.display();
+	}
+
+	private createListRow(
+		parentEl: HTMLElement,
+		icon: string,
+		label: string,
+		onIconClick: (event: MouseEvent) => void
+	): HTMLElement {
+		const rowEl = parentEl.createDiv({ cls: "props-framework-settings-row" });
+		const iconButton = rowEl.createEl("button", {
+			attr: { "aria-label": label, type: "button" },
+			cls: ["clickable-icon", "props-framework-list-icon"],
+		});
+		setIcon(iconButton, icon);
+		iconButton.addEventListener("click", onIconClick);
+		return rowEl;
+	}
+
+	private renderListSummary(
+		rowEl: HTMLElement,
+		title: string,
+		subtitle: string,
+		onOpen: () => void
+	): void {
+		const summaryButton = rowEl.createEl("button", {
+			attr: { type: "button" },
+			cls: "props-framework-list-summary",
+		});
+		summaryButton.createDiv({ cls: "props-framework-list-title", text: title });
+		summaryButton.createDiv({ cls: "props-framework-list-subtitle", text: subtitle });
+		summaryButton.addEventListener("click", onOpen);
+	}
+
+	private createActionButton(
+		parentEl: HTMLElement,
+		icon: string,
+		label: string,
+		onClick: () => void,
+		warning = false
+	): void {
+		const button = parentEl.createEl("button", {
+			attr: { "aria-label": label, type: "button" },
+			cls: ["clickable-icon", warning ? "is-warning" : ""],
+		});
+		setIcon(button, icon);
+		button.addEventListener("click", onClick);
+	}
+
+	private renderEmpty(parentEl: HTMLElement, text: string): void {
+		parentEl.createDiv({ cls: "props-framework-settings-empty", text });
 	}
 
 }

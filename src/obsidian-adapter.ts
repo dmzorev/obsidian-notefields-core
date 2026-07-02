@@ -1,6 +1,5 @@
 import { MarkdownView, Menu, Modal, Setting, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
-import { IconPickerModal } from "./pickers";
 import type { PropertyDefinition, PropertyWidgetComponent } from "./types";
 import { normalizeValidationResult } from "./types";
 import { renderValidation } from "./ui";
@@ -17,6 +16,7 @@ interface ObsidianPropertyWidget {
 	type: string;
 	icon: string;
 	name: () => string;
+	reservedKeys?: string[];
 	validate: (value: unknown) => boolean;
 	render: (el: HTMLElement, value: unknown, ctx: ObsidianPropertyRenderContext) => PropertyWidgetComponent;
 }
@@ -31,6 +31,15 @@ interface MetadataTypeManagerLike {
 	registeredTypeWidgets?: Record<string, ObsidianPropertyWidget>;
 	getTypeInfo?: (...args: unknown[]) => ObsidianTypeInfo;
 	getWidget?: (type: string) => ObsidianPropertyWidget | undefined;
+	getAssignedWidget?: (propertyName: string) => string | null;
+	setType?: (propertyName: string, type: string) => void;
+}
+
+export interface PropertyTypeChoice {
+	id: string;
+	name: string;
+	icon: string;
+	isFramework: boolean;
 }
 
 const BUILTIN_WIDGET_IDS = [
@@ -113,6 +122,65 @@ export class ObsidianPropertyAdapter {
 				metadataEditor.synchronize(data);
 			}
 		}
+	}
+
+	getPropertyTypeChoices(propertyName: string): PropertyTypeChoice[] {
+		const widgets = Object.values(this.metadataTypeManager?.registeredTypeWidgets ?? {});
+		return widgets
+			.filter((widget) => !widget.reservedKeys || widget.reservedKeys.includes(propertyName))
+			.filter((widget, index, all) => all.findIndex((candidate) => candidate.type === widget.type) === index)
+			.map((widget) => ({
+				id: widget.type,
+				name: widget.name(),
+				icon: widget.icon,
+				isFramework: Boolean(this.plugin.api.getRegisteredType(widget.type)),
+			}))
+			.sort((left, right) => Number(right.isFramework) - Number(left.isFramework)
+				|| left.name.localeCompare(right.name));
+	}
+
+	getPropertyType(propertyName: string): PropertyTypeChoice | null {
+		const definition = this.plugin.api.getPropertyDefinition(propertyName);
+		const typeId = definition && definition.typeId !== "notefields:display"
+			? definition.typeId
+			: this.metadataTypeManager?.getAssignedWidget?.(propertyName)
+				?? this.metadataTypeManager?.getTypeInfo?.(propertyName)?.expected?.type
+				?? "text";
+		return this.getPropertyTypeChoices(propertyName).find((choice) => choice.id === typeId) ?? null;
+	}
+
+	async setPropertyType(propertyName: string, typeId: string): Promise<void> {
+		const choice = this.getPropertyTypeChoices(propertyName).find((candidate) => candidate.id === typeId);
+		if (!choice || !this.metadataTypeManager?.setType) {
+			return;
+		}
+
+		this.metadataTypeManager.setType(propertyName, typeId);
+		const definition = this.plugin.api.getPropertyDefinition(propertyName)
+			?? this.plugin.ensureDisplayDefinition(propertyName);
+		if (choice.isFramework) {
+			const previousType = this.plugin.api.getRegisteredType(definition.typeId);
+			const nextType = this.plugin.api.getRegisteredType(typeId);
+			let config: unknown = structuredClone(nextType?.defaultConfig ?? {});
+			if (previousType?.optionSupport && nextType?.optionSupport) {
+				config = nextType.optionSupport.setBinding(
+					config,
+					previousType.optionSupport.getBinding(definition.config)
+				);
+			}
+			await this.plugin.api.setPropertyDefinition({
+				...definition,
+				typeId,
+				config,
+			});
+		} else {
+			await this.plugin.api.setPropertyDefinition({
+				...definition,
+				typeId: "notefields:display",
+				config: {},
+			});
+		}
+		this.reloadAllProperties();
 	}
 
 	private registerWidgets(): void {
@@ -378,7 +446,7 @@ export class ObsidianPropertyAdapter {
 	}
 }
 
-class PropertyBasicsModal extends Modal {
+export class PropertyBasicsModal extends Modal {
 	constructor(
 		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly propertyName: string
@@ -395,6 +463,7 @@ class PropertyBasicsModal extends Modal {
 		let definition: PropertyDefinition = initialDefinition;
 
 		this.contentEl.empty();
+		this.modalEl.addClass("props-framework-editor-modal");
 		this.contentEl.addClass("props-framework-modal");
 		new Setting(this.contentEl)
 			.setName("Property display")
@@ -428,6 +497,22 @@ class PropertyBasicsModal extends Modal {
 			});
 
 		new Setting(this.contentEl)
+			.setName("Property type")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case -- Obsidian and NoteFields are product names.
+			.setDesc("Use a standard Obsidian type or a type provided by NoteFields.")
+			.addDropdown((dropdown) => {
+				for (const choice of this.plugin.adapter?.getPropertyTypeChoices(definition.property) ?? []) {
+					dropdown.addOption(choice.id, choice.name);
+				}
+				dropdown
+					.setValue(this.plugin.adapter?.getPropertyType(definition.property)?.id ?? definition.typeId)
+					.onChange(async (typeId) => {
+						await this.plugin.adapter?.setPropertyType(definition.property, typeId);
+						definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
+					});
+			});
+
+		new Setting(this.contentEl)
 			.setName("Icon")
 			// eslint-disable-next-line obsidianmd/ui/sentence-case -- Icon ids are literal examples.
 			.setDesc("Use a built-in icon id, for example lucide-list-check.")
@@ -451,14 +536,14 @@ class PropertyBasicsModal extends Modal {
 				.setIcon("lucide-search")
 				.setTooltip("Choose icon")
 				.onClick(() => {
-					new IconPickerModal(this.plugin.app, definition.icon ?? null, async (icon) => {
+					this.plugin.api.openIconPicker(definition.icon ?? null, async (icon) => {
 						const nextDefinition = {
 							...definition,
 							icon: icon ?? undefined,
 						};
 						await this.plugin.api.setPropertyDefinition(nextDefinition);
 						definition = nextDefinition;
-					}).open();
+					});
 				}));
 
 		new Setting(this.contentEl)
@@ -484,7 +569,7 @@ class PropertyBasicsModal extends Modal {
 	}
 }
 
-class PropertySettingsModal extends Modal {
+export class PropertySettingsModal extends Modal {
 	constructor(
 		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly propertyName: string
@@ -494,6 +579,7 @@ class PropertySettingsModal extends Modal {
 
 	onOpen(): void {
 		this.contentEl.empty();
+		this.modalEl.addClass("props-framework-editor-modal");
 		this.contentEl.addClass("props-framework-modal");
 
 		const definition = this.plugin.api.getPropertyDefinition(this.propertyName);

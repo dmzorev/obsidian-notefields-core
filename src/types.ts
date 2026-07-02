@@ -73,6 +73,26 @@ export interface ValueOption {
 
 export type ValueOptionInput = Omit<ValueOption, "id"> & { id?: string };
 
+export interface IconOption {
+	id: string;
+	value: string;
+	label?: string;
+	aliases?: string[];
+	meta?: OptionMetadata;
+}
+
+export type IconOptionInput = Omit<IconOption, "id"> & { id?: string };
+
+export interface ColorOption {
+	id: string;
+	value: string;
+	label?: string;
+	aliases?: string[];
+	meta?: OptionMetadata;
+}
+
+export type ColorOptionInput = Omit<ColorOption, "id"> & { id?: string };
+
 export interface LocalValueOptionBinding {
 	mode: "local";
 	valueType: OptionValueType;
@@ -92,6 +112,26 @@ export interface ValueOptionCollection {
 	kind: "value";
 	valueType: OptionValueType;
 	options: ValueOption[];
+	ownerPluginId?: string;
+	readonly?: boolean;
+	schemaVersion: number;
+}
+
+export interface IconOptionCollection {
+	id: string;
+	name: string;
+	kind: "icon";
+	options: IconOption[];
+	ownerPluginId?: string;
+	readonly?: boolean;
+	schemaVersion: number;
+}
+
+export interface ColorOptionCollection {
+	id: string;
+	name: string;
+	kind: "color";
+	options: ColorOption[];
 	ownerPluginId?: string;
 	readonly?: boolean;
 	schemaVersion: number;
@@ -141,6 +181,8 @@ export interface PropertySettingsContext<TConfig = unknown> {
 export interface NoteFieldsSettings {
 	properties: Record<string, PropertyDefinition>;
 	valueOptionCollections: Record<string, ValueOptionCollection>;
+	iconOptionCollections: Record<string, IconOptionCollection>;
+	colorOptionCollections: Record<string, ColorOptionCollection>;
 	dataVersion: number;
 }
 
@@ -152,6 +194,20 @@ export interface CreateValueOptionCollectionInput {
 	name: string;
 	valueType?: OptionValueType;
 	options?: ValueOptionInput[];
+	ownerPluginId?: string;
+	readonly?: boolean;
+}
+
+export interface CreateIconOptionCollectionInput {
+	name: string;
+	options?: IconOptionInput[];
+	ownerPluginId?: string;
+	readonly?: boolean;
+}
+
+export interface CreateColorOptionCollectionInput {
+	name: string;
+	options?: ColorOptionInput[];
 	ownerPluginId?: string;
 	readonly?: boolean;
 }
@@ -180,6 +236,24 @@ export interface NoteFieldsApi {
 	removeValueOptionCollection: (collectionId: string) => Promise<boolean>;
 	resolveValueOptions: (binding: ValueOptionBinding) => ValueOption[];
 	renderValueOptionsEditor: (el: HTMLElement, context: ValueOptionsEditorContext) => void;
+	createIconOption: (input: IconOptionInput) => IconOption;
+	getSystemIconCollectionId: () => string;
+	getIconOptionCollections: () => IconOptionCollection[];
+	getIconOptionCollection: (collectionId: string) => IconOptionCollection | null;
+	createIconOptionCollection: (input: CreateIconOptionCollectionInput) => Promise<IconOptionCollection>;
+	updateIconOptionCollection: (collection: IconOptionCollection) => Promise<void>;
+	removeIconOptionCollection: (collectionId: string) => Promise<boolean>;
+	resolveIconOptions: (collectionId?: string | null) => IconOption[];
+	openIconPicker: (current: string | null, onChoose: (icon: string | null) => void | Promise<void>, collectionId?: string | null) => void;
+	createColorOption: (input: ColorOptionInput) => ColorOption;
+	getSystemColorCollectionId: () => string;
+	getColorOptionCollections: () => ColorOptionCollection[];
+	getColorOptionCollection: (collectionId: string) => ColorOptionCollection | null;
+	createColorOptionCollection: (input: CreateColorOptionCollectionInput) => Promise<ColorOptionCollection>;
+	updateColorOptionCollection: (collection: ColorOptionCollection) => Promise<void>;
+	removeColorOptionCollection: (collectionId: string) => Promise<boolean>;
+	resolveColorOptions: (collectionId?: string | null) => ColorOption[];
+	openColorPicker: (current: string | null, onChoose: (color: string | null) => void | Promise<void>, collectionId?: string | null) => void;
 	refresh: () => void;
 }
 

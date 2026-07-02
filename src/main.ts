@@ -2,6 +2,7 @@ import { Plugin, TFile } from "obsidian";
 import { NoteFieldsCoreApi, PropertyTypeRegistry } from "./api";
 import { createNestedType } from "./builtins/nested";
 import { createMultiselectType, createSelectType } from "./builtins/select";
+import { CatalogOptionsService } from "./catalog-options";
 import { ObsidianPropertyAdapter } from "./obsidian-adapter";
 import {
 	DEFAULT_SETTINGS,
@@ -30,6 +31,7 @@ export default class NoteFieldsCorePlugin extends Plugin {
 	settings: NoteFieldsSettings;
 	api: NoteFieldsCoreApi;
 	adapter: ObsidianPropertyAdapter | null = null;
+	readonly catalogOptions = new CatalogOptionsService(this);
 	readonly valueOptions = new ValueOptionsService(this);
 
 	private readonly registry = new PropertyTypeRegistry();
@@ -65,11 +67,13 @@ export default class NoteFieldsCorePlugin extends Plugin {
 		const data = ((await this.loadData()) ?? {}) as Partial<NoteFieldsSettings>;
 		const properties = data.properties ?? {};
 		const collections = data.valueOptionCollections ?? {};
+		const iconCollections = data.iconOptionCollections ?? {};
+		const colorCollections = data.colorOptionCollections ?? {};
 
 		this.settings = {
 			...DEFAULT_SETTINGS,
 			...data,
-			dataVersion: 2,
+			dataVersion: 3,
 			properties: Object.fromEntries(
 				Object.entries(properties)
 					.map(([key, definition]) => {
@@ -83,6 +87,18 @@ export default class NoteFieldsCorePlugin extends Plugin {
 			valueOptionCollections: Object.fromEntries(
 				Object.entries(collections).map(([key, collection]) => {
 					const normalized = this.valueOptions.normalizeCollection({ ...collection, id: collection.id || key });
+					return [normalized.id, normalized];
+				})
+			),
+			iconOptionCollections: Object.fromEntries(
+				Object.entries(iconCollections).map(([key, collection]) => {
+					const normalized = this.catalogOptions.normalizeIconCollection({ ...collection, id: collection.id || key });
+					return [normalized.id, normalized];
+				})
+			),
+			colorOptionCollections: Object.fromEntries(
+				Object.entries(colorCollections).map(([key, collection]) => {
+					const normalized = this.catalogOptions.normalizeColorCollection({ ...collection, id: collection.id || key });
 					return [normalized.id, normalized];
 				})
 			),

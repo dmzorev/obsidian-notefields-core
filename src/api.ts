@@ -1,11 +1,26 @@
 import type { App, TFile } from "obsidian";
+import {
+	normalizeColorOption,
+	normalizeIconOption,
+	SYSTEM_COLOR_COLLECTION_ID,
+	SYSTEM_ICON_COLLECTION_ID,
+} from "./catalog-options";
 import type NoteFieldsCorePlugin from "./main";
 import { createOptionId, normalizeValueOption, optionValuesEqual, uniqueValueOptions } from "./options";
 import { renderValueOptionsEditor } from "./options-editor";
+import { ColorPickerModal, IconPickerModal } from "./pickers";
 import { normalizeDefinition, normalizePropertyName } from "./settings";
 import type {
 	PropertyDefinition,
+	ColorOption,
+	ColorOptionCollection,
+	ColorOptionInput,
+	CreateColorOptionCollectionInput,
+	CreateIconOptionCollectionInput,
 	CreateValueOptionCollectionInput,
+	IconOption,
+	IconOptionCollection,
+	IconOptionInput,
 	OptionValue,
 	PropertyRenderContext,
 	PropertyType,
@@ -241,6 +256,138 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 		renderValueOptionsEditor(this.plugin, el, managedContext);
 	}
 
+	createIconOption(input: IconOptionInput): IconOption {
+		return normalizeIconOption(input);
+	}
+
+	getSystemIconCollectionId(): string {
+		return SYSTEM_ICON_COLLECTION_ID;
+	}
+
+	getIconOptionCollections(): IconOptionCollection[] {
+		return Object.values(this.plugin.settings.iconOptionCollections)
+			.map(cloneCatalogCollection)
+			.sort((left, right) => left.name.localeCompare(right.name));
+	}
+
+	getIconOptionCollection(collectionId: string): IconOptionCollection | null {
+		const collection = this.plugin.settings.iconOptionCollections[collectionId];
+		return collection ? cloneCatalogCollection(collection) : null;
+	}
+
+	async createIconOptionCollection(input: CreateIconOptionCollectionInput): Promise<IconOptionCollection> {
+		const collection = this.plugin.catalogOptions.normalizeIconCollection({
+			id: createOptionId("icon-collection"),
+			name: input.name,
+			kind: "icon",
+			options: (input.options ?? []).map(normalizeIconOption),
+			ownerPluginId: input.ownerPluginId,
+			readonly: input.readonly,
+			schemaVersion: 1,
+		});
+		this.plugin.settings.iconOptionCollections[collection.id] = collection;
+		await this.plugin.saveSettings();
+		return cloneCatalogCollection(collection);
+	}
+
+	async updateIconOptionCollection(collection: IconOptionCollection): Promise<void> {
+		const previous = this.plugin.settings.iconOptionCollections[collection.id];
+		if (!previous || previous.readonly) {
+			return;
+		}
+		this.plugin.settings.iconOptionCollections[collection.id] = this.plugin.catalogOptions.normalizeIconCollection(collection);
+		await this.plugin.saveSettings();
+		this.refresh();
+	}
+
+	async removeIconOptionCollection(collectionId: string): Promise<boolean> {
+		const collection = this.plugin.settings.iconOptionCollections[collectionId];
+		if (!collection || collection.readonly) {
+			return false;
+		}
+		delete this.plugin.settings.iconOptionCollections[collectionId];
+		await this.plugin.saveSettings();
+		return true;
+	}
+
+	resolveIconOptions(collectionId?: string | null): IconOption[] {
+		return this.plugin.catalogOptions.resolveIcons(collectionId).map(cloneCatalogOption);
+	}
+
+	openIconPicker(
+		current: string | null,
+		onChoose: (icon: string | null) => void | Promise<void>,
+		collectionId?: string | null
+	): void {
+		new IconPickerModal(this.plugin, current, onChoose, collectionId ?? null).open();
+	}
+
+	createColorOption(input: ColorOptionInput): ColorOption {
+		return normalizeColorOption(input);
+	}
+
+	getSystemColorCollectionId(): string {
+		return SYSTEM_COLOR_COLLECTION_ID;
+	}
+
+	getColorOptionCollections(): ColorOptionCollection[] {
+		return Object.values(this.plugin.settings.colorOptionCollections)
+			.map(cloneCatalogCollection)
+			.sort((left, right) => left.name.localeCompare(right.name));
+	}
+
+	getColorOptionCollection(collectionId: string): ColorOptionCollection | null {
+		const collection = this.plugin.settings.colorOptionCollections[collectionId];
+		return collection ? cloneCatalogCollection(collection) : null;
+	}
+
+	async createColorOptionCollection(input: CreateColorOptionCollectionInput): Promise<ColorOptionCollection> {
+		const collection = this.plugin.catalogOptions.normalizeColorCollection({
+			id: createOptionId("color-collection"),
+			name: input.name,
+			kind: "color",
+			options: (input.options ?? []).map(normalizeColorOption),
+			ownerPluginId: input.ownerPluginId,
+			readonly: input.readonly,
+			schemaVersion: 1,
+		});
+		this.plugin.settings.colorOptionCollections[collection.id] = collection;
+		await this.plugin.saveSettings();
+		return cloneCatalogCollection(collection);
+	}
+
+	async updateColorOptionCollection(collection: ColorOptionCollection): Promise<void> {
+		const previous = this.plugin.settings.colorOptionCollections[collection.id];
+		if (!previous || previous.readonly) {
+			return;
+		}
+		this.plugin.settings.colorOptionCollections[collection.id] = this.plugin.catalogOptions.normalizeColorCollection(collection);
+		await this.plugin.saveSettings();
+		this.refresh();
+	}
+
+	async removeColorOptionCollection(collectionId: string): Promise<boolean> {
+		const collection = this.plugin.settings.colorOptionCollections[collectionId];
+		if (!collection || collection.readonly) {
+			return false;
+		}
+		delete this.plugin.settings.colorOptionCollections[collectionId];
+		await this.plugin.saveSettings();
+		return true;
+	}
+
+	resolveColorOptions(collectionId?: string | null): ColorOption[] {
+		return this.plugin.catalogOptions.resolveColors(collectionId).map(cloneCatalogOption);
+	}
+
+	openColorPicker(
+		current: string | null,
+		onChoose: (color: string | null) => void | Promise<void>,
+		collectionId?: string | null
+	): void {
+		new ColorPickerModal(this.plugin, current, onChoose, collectionId ?? null).open();
+	}
+
 	refresh(): void {
 		this.plugin.adapter?.reloadAllProperties();
 	}
@@ -295,6 +442,25 @@ function cloneCollection(collection: ValueOptionCollection): ValueOptionCollecti
 			aliases: option.aliases ? [...option.aliases] : undefined,
 			meta: option.meta ? { ...option.meta } : undefined,
 		})),
+	};
+}
+
+function cloneCatalogCollection<T extends IconOptionCollection | ColorOptionCollection>(collection: T): T {
+	return {
+		...collection,
+		options: collection.options.map((option) => ({
+			...option,
+			aliases: option.aliases ? [...option.aliases] : undefined,
+			meta: option.meta ? { ...option.meta } : undefined,
+		})),
+	};
+}
+
+function cloneCatalogOption<T extends IconOption | ColorOption>(option: T): T {
+	return {
+		...option,
+		aliases: option.aliases ? [...option.aliases] : undefined,
+		meta: option.meta ? { ...option.meta } : undefined,
 	};
 }
 

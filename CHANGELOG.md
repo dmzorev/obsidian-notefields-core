@@ -20,15 +20,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - On-demand collection of existing property values from notes.
 - Automatic frontmatter updates when an option value changes.
 - Wikilink updates in stored options when their target note is renamed.
+- Reusable icon collections backed by the complete built-in Obsidian icon catalog.
+- Reusable color collections with the standard Obsidian color picker.
+- Collection-aware icon and color pickers with labels and alias search.
+- Public icon and color collection CRUD, resolver, and picker APIs.
 
 ### Fixed
 
+- Property type controls now include standard Obsidian types alongside NoteFields types.
+- Picker and editor modals now stay within the available viewport.
 - Multiselect values in Bases tables now remain left-aligned on one line when the cell is too narrow.
 - Nested editors now return to their compact preview when focus leaves the Bases cell.
 - Nested add and delete actions keep the Bases editor open across value updates.
 - Nested empty text values and add controls now follow the compact Obsidian properties style.
 - NoteFields values now use the same small horizontal inset as standard Bases values.
 - Select and Multiselect fields now clip predictably in narrow Bases columns without overlapping adjacent cells.
+
+### Changed
+
+- Plugin settings now use compact property and collection lists with focused editor modals.
+- Creating icon and color collections no longer inserts large editors into the settings page.
 
 ## [1.0.0] - 2026-06-21
 

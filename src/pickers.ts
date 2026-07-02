@@ -1,71 +1,73 @@
-import { App, Modal, getIconIds, setIcon } from "obsidian";
-
-const BASIC_COLORS = [
-	"red",
-	"orange",
-	"yellow",
-	"green",
-	"cyan",
-	"blue",
-	"purple",
-	"pink",
-	"gray",
-];
+import { Modal, Setting, setIcon } from "obsidian";
+import {
+	SYSTEM_COLOR_COLLECTION_ID,
+	SYSTEM_ICON_COLLECTION_ID,
+	catalogOptionMatchesQuery,
+	colorToCss,
+} from "./catalog-options";
+import type NoteFieldsCorePlugin from "./main";
 
 export class IconPickerModal extends Modal {
 	constructor(
-		app: App,
+		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly currentIcon: string | null,
-		private readonly onChoose: (icon: string | null) => void | Promise<void>
+		private readonly onChoose: (icon: string | null) => void | Promise<void>,
+		private readonly initialCollectionId: string | null = null
 	) {
-		super(app);
+		super(plugin.app);
 	}
 
 	onOpen(): void {
 		this.contentEl.empty();
 		this.modalEl.addClass("props-framework-picker-modal");
 		this.contentEl.createEl("h3", { text: "Choose icon" });
+		let collectionId = this.initialCollectionId ?? "";
+
+		new Setting(this.contentEl)
+			.setName("Collection")
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption("", "All icons")
+					.addOption(SYSTEM_ICON_COLLECTION_ID, "Obsidian icons");
+				for (const collection of this.plugin.api.getIconOptionCollections()) {
+					dropdown.addOption(collection.id, collection.name);
+				}
+				dropdown.setValue(collectionId).onChange((value) => {
+					collectionId = value;
+					render();
+				});
+			});
 
 		const inputEl = this.contentEl.createEl("input", {
-			attr: {
-				placeholder: "Search icons",
-				type: "text",
-			},
+			attr: { placeholder: "Search icons", type: "text" },
 			cls: "metadata-input-text props-framework-picker-search",
 		});
 		const resultsEl = this.contentEl.createDiv({ cls: "props-framework-icon-grid" });
 
 		const render = (): void => {
 			resultsEl.empty();
-			const query = inputEl.value.trim().toLowerCase();
-			const icons = getIconIds()
-				.filter((icon) => !query || icon.toLowerCase().includes(query))
-				.slice(0, 160);
+			const icons = this.plugin.api.resolveIconOptions(collectionId || null)
+				.filter((option) => catalogOptionMatchesQuery(option, inputEl.value))
+				.slice(0, 240);
 
-			for (const icon of icons) {
+			for (const option of icons) {
 				const buttonEl = resultsEl.createEl("button", {
-					attr: {
-						"aria-label": icon,
-						type: "button",
-					},
-					cls: ["props-framework-icon-choice", icon === this.currentIcon ? "is-selected" : ""],
+					attr: { "aria-label": option.label ?? option.value, type: "button" },
+					cls: ["props-framework-icon-choice", option.value === this.currentIcon ? "is-selected" : ""],
 				});
-				setIcon(buttonEl, icon);
-				buttonEl.createSpan({ text: icon.replace(/^lucide-/u, "") });
-				buttonEl.addEventListener("click", () => {
-					void this.choose(icon);
-				});
+				const iconEl = buttonEl.createSpan({ cls: "props-framework-icon-choice-preview" });
+				setIcon(iconEl, option.value);
+				if (!iconEl.querySelector("svg")) {
+					setIcon(iconEl, "lucide-circle-help");
+				}
+				buttonEl.createSpan({ text: option.label ?? option.value.replace(/^lucide-/u, "") });
+				buttonEl.addEventListener("click", () => void this.choose(option.value));
 			}
 		};
 
 		const actionsEl = this.contentEl.createDiv({ cls: "props-framework-picker-actions" });
-		const clearButton = actionsEl.createEl("button", {
-			attr: { type: "button" },
-			text: "Clear",
-		});
-		clearButton.addEventListener("click", () => {
-			void this.choose(null);
-		});
+		const clearButton = actionsEl.createEl("button", { attr: { type: "button" }, text: "Clear" });
+		clearButton.addEventListener("click", () => void this.choose(null));
 
 		inputEl.addEventListener("input", render);
 		render();
@@ -84,64 +86,75 @@ export class IconPickerModal extends Modal {
 
 export class ColorPickerModal extends Modal {
 	constructor(
-		app: App,
+		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly currentColor: string | null,
-		private readonly onChoose: (color: string | null) => void | Promise<void>
+		private readonly onChoose: (color: string | null) => void | Promise<void>,
+		private readonly initialCollectionId: string | null = null
 	) {
-		super(app);
+		super(plugin.app);
 	}
 
 	onOpen(): void {
 		this.contentEl.empty();
 		this.modalEl.addClass("props-framework-picker-modal");
 		this.contentEl.createEl("h3", { text: "Choose color" });
+		let collectionId = this.initialCollectionId ?? "";
+		let customColor = normalizeColorToHex(this.currentColor) ?? "#7c8cff";
 
-		const previewEl = this.contentEl.createDiv({ cls: "props-framework-color-preview" });
-		const inputEl = this.contentEl.createEl("input", {
-			attr: {
-				type: "color",
-			},
-			cls: "props-framework-color-input",
+		new Setting(this.contentEl)
+			.setName("Collection")
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption("", "All colors")
+					.addOption(SYSTEM_COLOR_COLLECTION_ID, "Default colors");
+				for (const collection of this.plugin.api.getColorOptionCollections()) {
+					dropdown.addOption(collection.id, collection.name);
+				}
+				dropdown.setValue(collectionId).onChange((value) => {
+					collectionId = value;
+					render();
+				});
+			});
+
+		const searchEl = this.contentEl.createEl("input", {
+			attr: { placeholder: "Search colors", type: "text" },
+			cls: "metadata-input-text props-framework-picker-search",
 		});
-		inputEl.value = normalizeColorToHex(this.currentColor) ?? "#7c8cff";
-		previewEl.style.backgroundColor = inputEl.value;
-
-		inputEl.addEventListener("input", () => {
-			previewEl.style.backgroundColor = inputEl.value;
-		});
-
 		const paletteEl = this.contentEl.createDiv({ cls: "props-framework-color-grid" });
-		for (const color of BASIC_COLORS) {
-			const swatchEl = paletteEl.createEl("button", {
-				attr: {
-					"aria-label": color,
-					type: "button",
-				},
-				cls: "props-framework-color-choice",
-			});
-			swatchEl.style.backgroundColor = `rgba(var(--color-${color}-rgb), 1)`;
-			swatchEl.addEventListener("click", () => {
-				void this.choose(color);
-			});
-		}
 
-		const customEl = this.contentEl.createDiv({ cls: "props-framework-picker-actions" });
-		const applyButton = customEl.createEl("button", {
-			attr: { type: "button" },
-			cls: "mod-cta",
-			text: "Apply",
-		});
-		applyButton.addEventListener("click", () => {
-			void this.choose(inputEl.value);
-		});
+		const render = (): void => {
+			paletteEl.empty();
+			const colors = this.plugin.api.resolveColorOptions(collectionId || null)
+				.filter((option) => catalogOptionMatchesQuery(option, searchEl.value));
+			for (const option of colors) {
+				const swatchEl = paletteEl.createEl("button", {
+					attr: { "aria-label": option.label ?? option.value, type: "button" },
+					cls: ["props-framework-color-choice", option.value === this.currentColor ? "is-selected" : ""],
+				});
+				swatchEl.style.backgroundColor = colorToCss(option.value);
+				swatchEl.setAttribute("data-tooltip-position", "top");
+				swatchEl.addEventListener("click", () => void this.choose(option.value));
+			}
+		};
 
-		const clearButton = customEl.createEl("button", {
-			attr: { type: "button" },
-			text: "Clear",
-		});
-		clearButton.addEventListener("click", () => {
-			void this.choose(null);
-		});
+		new Setting(this.contentEl)
+			.setName("Custom color")
+			.addColorPicker((picker) => picker
+				.setValue(customColor)
+				.onChange((value) => {
+					customColor = value;
+				}))
+			.addButton((button) => button
+				.setButtonText("Apply")
+				.setCta()
+				.onClick(() => void this.choose(customColor)))
+			.addButton((button) => button
+				.setButtonText("Clear")
+				.onClick(() => void this.choose(null)));
+
+		searchEl.addEventListener("input", render);
+		render();
+		window.setTimeout(() => searchEl.focus(), 0);
 	}
 
 	onClose(): void {
@@ -155,13 +168,5 @@ export class ColorPickerModal extends Modal {
 }
 
 function normalizeColorToHex(color: string | null): string | null {
-	if (!color?.startsWith("#")) {
-		return null;
-	}
-
-	if (/^#[0-9a-f]{6}$/iu.test(color)) {
-		return color;
-	}
-
-	return null;
+	return color && /^#[0-9a-f]{6}$/iu.test(color) ? color : null;
 }

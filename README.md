@@ -11,6 +11,7 @@ Use Select, Multiselect, and nested object fields in the Properties view and Obs
 - **Nested object fields** for schema-less objects and lists, including recursive nesting and inline key editing.
 - **Bases table support** with compact field previews and editors that expand on focus.
 - **Reusable option collections** shared by select, multiselect, and third-party field types.
+- **Reusable icon and color collections** used by NoteFields pickers and exposed to other plugins.
 - **Typed YAML values** with text, number, boolean, and mixed-value collections.
 - **Option metadata** with separate stored values, displayed titles, aliases, colors, icons, and plugin metadata.
 - **Vault option discovery** that imports existing values from your notes on demand.
@@ -82,6 +83,14 @@ Each option set has a YAML value type:
 Enable **Allow custom values** to create values while editing a note. With **Remember custom values** enabled, new values are added to the active local or shared option set automatically. Use **Collect values** to scan existing notes and import values already used by that property.
 
 Options have stable internal identities that are never shown in the interface or written to frontmatter. When an option's YAML value changes, NoteFields updates matching values in every note that uses the affected local or shared option set. Stored `[[wikilinks]]` are also updated when their target note is renamed.
+
+### Configure icons and colors
+
+Under **Settings → NoteFields Core → Option collections**, create curated icon sets and color palettes. Icon entries use one shared value for the stored icon ID and rendered icon, while color entries use the color itself as their value. Both support displayed titles, search aliases, and plugin metadata.
+
+The icon picker always includes a virtual collection containing every built-in Obsidian icon. The color picker includes the default Obsidian palette and uses Obsidian's standard color component for custom colors. Virtual system collections are generated at runtime and are not copied into `data.json`.
+
+User collections can be selected directly in either picker. In **All icons** and **All colors**, metadata from user collections takes priority over the corresponding system option, allowing custom labels and aliases to improve the main search experience.
 
 ### Edit nested objects
 
@@ -220,6 +229,22 @@ const handle = noteFields?.registerType<MyConfig>({
 
 The API also exposes `createValueOption` plus collection CRUD methods: `getValueOptionCollections`, `getValueOptionCollection`, `createValueOptionCollection`, `updateValueOptionCollection`, and `removeValueOptionCollection`. Option IDs are framework-managed implementation details; plugins should preserve returned IDs when updating existing options.
 
+Icon and color integrations use the same collection-oriented API:
+
+```ts
+noteFields.openIconPicker(currentIcon, async (icon) => {
+  await saveIcon(icon);
+});
+
+noteFields.openColorPicker(currentColor, async (color) => {
+  await saveColor(color);
+});
+```
+
+Plugins can manage curated sets with `createIconOptionCollection`, `updateIconOptionCollection`, `createColorOptionCollection`, and `updateColorOptionCollection`. Use `resolveIconOptions` or `resolveColorOptions` to build a custom UI while retaining NoteFields labels, aliases, and metadata.
+
+Calling either resolver without a collection ID returns the merged catalog. Pass `getSystemIconCollectionId()` or `getSystemColorCollectionId()` to resolve only NoteFields' virtual built-in collection.
+
 ## Current limitations
 
 - Field definitions are global per vault and property name.
@@ -267,7 +292,7 @@ Planned directions include:
 
 - Additional Obsidian Bases view layouts.
 - Schema-backed object field types.
-- Additional reusable types such as colors, icons, progress, integer, and rating fields.
+- Additional reusable property types such as color, icon, progress, integer, and rating fields.
 - Folder-level field definitions and overrides.
 - Optional integrations with popular icon pack plugins.
 - APIs for richer property and media blocks in notes.
