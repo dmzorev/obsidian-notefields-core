@@ -1,0 +1,11 @@
+title: NoteFields Core
+description: Rich, extensible property fields for Obsidian notes and Bases.
+theme: minima
+markdown: kramdown
+repository: dmzorev/obsidian-notefields-core
+
+header_pages:
+  - getting-started.md
+  - fields-and-options.md
+  - bases.md
+  - developer/index.md

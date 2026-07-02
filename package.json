@@ -6,13 +6,13 @@
 	"types": "src/public-api.ts",
 	"type": "module",
 	"author": "Dmitry Zorev",
-	"homepage": "https://github.com/dmzorev/notefields-core#readme",
+	"homepage": "https://github.com/dmzorev/obsidian-notefields-core#readme",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/dmzorev/notefields-core.git"
+		"url": "git+https://github.com/dmzorev/obsidian-notefields-core.git"
 	},
 	"bugs": {
-		"url": "https://github.com/dmzorev/notefields-core/issues"
+		"url": "https://github.com/dmzorev/obsidian-notefields-core/issues"
 	},
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
