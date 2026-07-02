@@ -2,7 +2,7 @@ import { MarkdownView, Menu, Modal, Setting, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
 import type { PropertyDefinition, PropertyWidgetComponent } from "./types";
 import { normalizeValidationResult } from "./types";
-import { renderValidation } from "./ui";
+import { bindDebouncedInput, renderValidation } from "./ui";
 
 interface ObsidianPropertyRenderContext {
 	app: NoteFieldsCorePlugin["app"];
@@ -520,29 +520,21 @@ export class PropertyBasicsModal extends Modal {
 				text
 					// eslint-disable-next-line obsidianmd/ui/sentence-case -- Icon ids are literal examples.
 					.setPlaceholder("lucide-list-check")
-					.setValue(definition.icon ?? "")
-					.onChange(async (value) => {
-						const nextDefinition = {
-							...definition,
-							icon: value.trim() || undefined,
-						};
-						await this.plugin.api.setPropertyDefinition({
-							...nextDefinition,
-						});
-						definition = nextDefinition;
+					.setValue(definition.icon ?? "");
+				bindDebouncedInput(text.inputEl, async (value) => {
+					await this.plugin.api.patchPropertyDefinition(definition.property, {
+						icon: value.trim() || undefined,
 					});
+					definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
+				});
 			})
 			.addExtraButton((button) => button
 				.setIcon("lucide-search")
 				.setTooltip("Choose icon")
 				.onClick(() => {
 					this.plugin.api.openIconPicker(definition.icon ?? null, async (icon) => {
-						const nextDefinition = {
-							...definition,
-							icon: icon ?? undefined,
-						};
-						await this.plugin.api.setPropertyDefinition(nextDefinition);
-						definition = nextDefinition;
+						await this.plugin.api.patchPropertyDefinition(definition.property, { icon: icon ?? undefined });
+						definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
 					});
 				}));
 
@@ -552,15 +544,13 @@ export class PropertyBasicsModal extends Modal {
 			.addText((text) => {
 				text
 					.setPlaceholder(definition.property)
-					.setValue(definition.displayTitle ?? "")
-					.onChange(async (value) => {
-						const nextDefinition = {
-							...definition,
-							displayTitle: value.trim() || undefined,
-						};
-						await this.plugin.api.setPropertyDefinition(nextDefinition);
-						definition = nextDefinition;
+					.setValue(definition.displayTitle ?? "");
+				bindDebouncedInput(text.inputEl, async (value) => {
+					await this.plugin.api.patchPropertyDefinition(definition.property, {
+						displayTitle: value.trim() || undefined,
 					});
+					definition = this.plugin.api.getPropertyDefinition(definition.property) ?? definition;
+				});
 			});
 	}
 

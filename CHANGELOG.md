@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Rapid edits to option labels, aliases, icons and colors no longer overwrite one another with stale collection snapshots.
+- Text option edits are now persisted after a short debounce even when the editor modal closes immediately.
 - Property type controls now include standard Obsidian types alongside NoteFields types.
 - Picker and editor modals now stay within the available viewport.
 - Multiselect values in Bases tables now remain left-aligned on one line when the cell is too narrow.

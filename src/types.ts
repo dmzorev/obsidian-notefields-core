@@ -222,6 +222,7 @@ export interface NoteFieldsApi {
 	getPropertyDefinition: (propertyName: string) => PropertyDefinition | null;
 	getPropertyDefinitions: () => PropertyDefinition[];
 	setPropertyDefinition: (definition: PropertyDefinition) => Promise<void>;
+	patchPropertyDefinition: (propertyName: string, patch: Partial<Omit<PropertyDefinition, "property">>) => Promise<boolean>;
 	removePropertyDefinition: (propertyName: string) => Promise<void>;
 	getRegisteredType: <TConfig = unknown>(typeId: PropertyTypeId) => PropertyType<TConfig> | null;
 	getRegisteredTypes: () => PropertyType[];
@@ -233,6 +234,8 @@ export interface NoteFieldsApi {
 	getValueOptionCollection: (collectionId: string) => ValueOptionCollection | null;
 	createValueOptionCollection: (input: CreateValueOptionCollectionInput) => Promise<ValueOptionCollection>;
 	updateValueOptionCollection: (collection: ValueOptionCollection) => Promise<void>;
+	patchValueOption: (collectionId: string, optionId: string, patch: Partial<Omit<ValueOption, "id">>) => Promise<boolean>;
+	patchPropertyValueOption: (propertyName: string, optionId: string, patch: Partial<Omit<ValueOption, "id">>) => Promise<boolean>;
 	removeValueOptionCollection: (collectionId: string) => Promise<boolean>;
 	resolveValueOptions: (binding: ValueOptionBinding) => ValueOption[];
 	renderValueOptionsEditor: (el: HTMLElement, context: ValueOptionsEditorContext) => void;
@@ -242,6 +245,7 @@ export interface NoteFieldsApi {
 	getIconOptionCollection: (collectionId: string) => IconOptionCollection | null;
 	createIconOptionCollection: (input: CreateIconOptionCollectionInput) => Promise<IconOptionCollection>;
 	updateIconOptionCollection: (collection: IconOptionCollection) => Promise<void>;
+	patchIconOption: (collectionId: string, optionId: string, patch: Partial<Omit<IconOption, "id">>) => Promise<boolean>;
 	removeIconOptionCollection: (collectionId: string) => Promise<boolean>;
 	resolveIconOptions: (collectionId?: string | null) => IconOption[];
 	openIconPicker: (current: string | null, onChoose: (icon: string | null) => void | Promise<void>, collectionId?: string | null) => void;
@@ -251,6 +255,7 @@ export interface NoteFieldsApi {
 	getColorOptionCollection: (collectionId: string) => ColorOptionCollection | null;
 	createColorOptionCollection: (input: CreateColorOptionCollectionInput) => Promise<ColorOptionCollection>;
 	updateColorOptionCollection: (collection: ColorOptionCollection) => Promise<void>;
+	patchColorOption: (collectionId: string, optionId: string, patch: Partial<Omit<ColorOption, "id">>) => Promise<boolean>;
 	removeColorOptionCollection: (collectionId: string) => Promise<boolean>;
 	resolveColorOptions: (collectionId?: string | null) => ColorOption[];
 	openColorPicker: (current: string | null, onChoose: (color: string | null) => void | Promise<void>, collectionId?: string | null) => void;

@@ -36,16 +36,19 @@
 	display: block;
 	min-width: 0;
 	padding: 4px 8px;
-	border: 0;
-	background: transparent;
-	box-shadow: none;
+	appearance: none;
+	border: 0 !important;
+	border-radius: 0;
+	background: transparent !important;
+	box-shadow: none !important;
 	text-align: left;
 	color: var(--text-normal);
 }
 
 .props-framework-list-summary:hover {
-	background: transparent;
-	box-shadow: none;
+	background: transparent !important;
+	box-shadow: none !important;
+	color: var(--text-accent-hover);
 }
 
 .props-framework-list-title,

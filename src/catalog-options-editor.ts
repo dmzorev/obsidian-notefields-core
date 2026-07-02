@@ -7,6 +7,7 @@ import type {
 	IconOption,
 	IconOptionCollection,
 } from "./types";
+import { bindDebouncedInput } from "./ui";
 
 const NEW_COLOR_VALUES = ["#7c8cff", "#e93147", "#ec7500", "#08b94e", "#00bfbc", "#7852ee", "#d53984"];
 
@@ -37,13 +38,13 @@ export function renderIconCollectionEditor(
 
 		const valueInput = createTextInput(rowEl, "Icon ID", option.value);
 		valueInput.disabled = readonly;
-		valueInput.addEventListener("change", () => {
-			const value = valueInput.value.trim();
+		bindDebouncedInput(valueInput, async (inputValue) => {
+			const value = inputValue.trim();
 			if (!value) {
 				valueInput.value = option.value;
 				return;
 			}
-			void patchIconOption(plugin, collection.id, option.id, { value });
+			await patchIconOption(plugin, collection.id, option.id, { value });
 		});
 		bindCommonInputs(plugin, rowEl, collection.id, option, "icon", readonly);
 	}
@@ -61,14 +62,7 @@ export function renderIconCollectionEditor(
 				new Notice("No additional icons are available.");
 				return;
 			}
-			const latest = plugin.api.getIconOptionCollection(collection.id);
-			if (!latest) {
-				return;
-			}
-			await plugin.api.updateIconOptionCollection({
-				...latest,
-				options: [...latest.options, plugin.api.createIconOption({ value })],
-			});
+			await plugin.api.appendIconOption(collection.id, plugin.api.createIconOption({ value }));
 			rerenderIconEditor(plugin, hostEl, collection.id);
 		})();
 	});
@@ -96,13 +90,13 @@ export function renderColorCollectionEditor(
 		valueInput.disabled = readonly;
 		valueInput.style.setProperty("--props-framework-option-color", colorToCss(option.value));
 		valueInput.addClass("props-framework-color-value-input");
-		valueInput.addEventListener("change", () => {
-			const value = valueInput.value.trim();
+		bindDebouncedInput(valueInput, async (inputValue) => {
+			const value = inputValue.trim();
 			if (!value) {
 				valueInput.value = option.value;
 				return;
 			}
-			void patchColorOption(plugin, collection.id, option.id, { value });
+			await patchColorOption(plugin, collection.id, option.id, { value });
 		});
 		bindCommonInputs(plugin, rowEl, collection.id, option, "color", readonly);
 	}
@@ -119,14 +113,7 @@ export function renderColorCollectionEditor(
 				new Notice("Choose a different color before adding another option.");
 				return;
 			}
-			const latest = plugin.api.getColorOptionCollection(collection.id);
-			if (!latest) {
-				return;
-			}
-			await plugin.api.updateColorOptionCollection({
-				...latest,
-				options: [...latest.options, plugin.api.createColorOption({ value })],
-			});
+			await plugin.api.appendColorOption(collection.id, plugin.api.createColorOption({ value }));
 			rerenderColorEditor(plugin, hostEl, collection.id);
 		})();
 	});
@@ -142,14 +129,14 @@ function bindCommonInputs(
 ): void {
 	const labelInput = createTextInput(rowEl, "Displayed title", option.label ?? "");
 	labelInput.disabled = readonly;
-	labelInput.addEventListener("change", () => {
-		void patchCatalogOption(plugin, collectionId, option.id, { label: labelInput.value.trim() || undefined }, kind);
+	bindDebouncedInput(labelInput, async (value) => {
+		await patchCatalogOption(plugin, collectionId, option.id, { label: value.trim() || undefined }, kind);
 	});
 	const aliasesInput = createTextInput(rowEl, "Aliases", option.aliases?.join(", ") ?? "");
 	aliasesInput.disabled = readonly;
-	aliasesInput.addEventListener("change", () => {
-		const aliases = aliasesInput.value.split(",").map((alias) => alias.trim()).filter(Boolean);
-		void patchCatalogOption(plugin, collectionId, option.id, { aliases: aliases.length ? aliases : undefined }, kind);
+	bindDebouncedInput(aliasesInput, async (value) => {
+		const aliases = value.split(",").map((alias) => alias.trim()).filter(Boolean);
+		await patchCatalogOption(plugin, collectionId, option.id, { aliases: aliases.length ? aliases : undefined }, kind);
 	});
 	const deleteButton = rowEl.createEl("button", {
 		attr: { "aria-label": `Delete ${kind}`, type: "button" },
@@ -160,24 +147,12 @@ function bindCommonInputs(
 	deleteButton.addEventListener("click", () => {
 		void (async () => {
 			if (kind === "icon") {
-				const collection = plugin.api.getIconOptionCollection(collectionId);
-				if (collection) {
-					await plugin.api.updateIconOptionCollection({
-						...collection,
-						options: collection.options.filter((candidate) => candidate.id !== option.id),
-					});
-					rerenderIconEditor(plugin, rowEl.closest(".props-framework-catalog-editor") as HTMLElement, collectionId);
-				}
+				await plugin.api.removeIconOption(collectionId, option.id);
+				rerenderIconEditor(plugin, rowEl.closest(".props-framework-catalog-editor") as HTMLElement, collectionId);
 				return;
 			}
-			const collection = plugin.api.getColorOptionCollection(collectionId);
-			if (collection) {
-				await plugin.api.updateColorOptionCollection({
-					...collection,
-					options: collection.options.filter((candidate) => candidate.id !== option.id),
-				});
-				rerenderColorEditor(plugin, rowEl.closest(".props-framework-catalog-editor") as HTMLElement, collectionId);
-			}
+			await plugin.api.removeColorOption(collectionId, option.id);
+			rerenderColorEditor(plugin, rowEl.closest(".props-framework-catalog-editor") as HTMLElement, collectionId);
 		})();
 	});
 }
@@ -202,13 +177,7 @@ async function patchIconOption(
 	optionId: string,
 	patch: Partial<IconOption>
 ): Promise<void> {
-	const collection = plugin.api.getIconOptionCollection(collectionId);
-	if (collection) {
-		await plugin.api.updateIconOptionCollection({
-			...collection,
-			options: collection.options.map((option) => option.id === optionId ? { ...option, ...patch } : option),
-		});
-	}
+	await plugin.api.patchIconOption(collectionId, optionId, patch);
 }
 
 async function patchColorOption(
@@ -217,13 +186,7 @@ async function patchColorOption(
 	optionId: string,
 	patch: Partial<ColorOption>
 ): Promise<void> {
-	const collection = plugin.api.getColorOptionCollection(collectionId);
-	if (collection) {
-		await plugin.api.updateColorOptionCollection({
-			...collection,
-			options: collection.options.map((option) => option.id === optionId ? { ...option, ...patch } : option),
-		});
-	}
+	await plugin.api.patchColorOption(collectionId, optionId, patch);
 }
 
 function rerenderIconEditor(plugin: NoteFieldsCorePlugin, hostEl: HTMLElement, collectionId: string): void {

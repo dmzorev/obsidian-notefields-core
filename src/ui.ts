@@ -46,3 +46,36 @@ export function containMetadataEvents(el: HTMLElement): void {
 	el.addEventListener("mousedown", (event) => event.stopPropagation());
 	el.addEventListener("click", (event) => event.stopPropagation());
 }
+
+export function bindDebouncedInput(
+	inputEl: HTMLInputElement,
+	onCommit: (value: string) => void | Promise<void>,
+	delay = 250
+): void {
+	let timeoutId: number | null = null;
+	let dirty = false;
+	let lastRequestedValue = inputEl.value;
+	const commit = (): void => {
+		if (timeoutId !== null) {
+			window.clearTimeout(timeoutId);
+			timeoutId = null;
+		}
+		const value = inputEl.value;
+		if (!dirty && value === lastRequestedValue) {
+			return;
+		}
+		dirty = false;
+		lastRequestedValue = value;
+		void Promise.resolve(onCommit(value)).catch((error: unknown) => {
+			console.error("NoteFields Core: failed to save an input value.", error);
+		});
+	};
+	inputEl.addEventListener("input", () => {
+		dirty = true;
+		if (timeoutId !== null) {
+			window.clearTimeout(timeoutId);
+		}
+		timeoutId = window.setTimeout(commit, delay);
+	});
+	inputEl.addEventListener("change", commit);
+}

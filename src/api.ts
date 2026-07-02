@@ -83,6 +83,10 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 	}
 
 	async setPropertyDefinition(definition: PropertyDefinition): Promise<void> {
+		await this.plugin.runSettingsMutation(() => this.setPropertyDefinitionNow(definition));
+	}
+
+	private async setPropertyDefinitionNow(definition: PropertyDefinition): Promise<void> {
 		const normalized = normalizeDefinition(definition);
 		const key = normalizePropertyName(normalized.property);
 		if (!key) {
@@ -108,6 +112,20 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 		this.plugin.settings.properties[key] = normalized;
 		await this.plugin.saveSettings();
 		this.refresh();
+	}
+
+	async patchPropertyDefinition(
+		propertyName: string,
+		patch: Partial<Omit<PropertyDefinition, "property">>
+	): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const definition = this.getPropertyDefinition(propertyName);
+			if (!definition) {
+				return false;
+			}
+			await this.setPropertyDefinitionNow({ ...definition, ...patch, property: definition.property });
+			return true;
+		});
 	}
 
 	async removePropertyDefinition(propertyName: string): Promise<void> {
@@ -200,6 +218,10 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 	}
 
 	async updateValueOptionCollection(collection: ValueOptionCollection): Promise<void> {
+		await this.plugin.runSettingsMutation(() => this.updateValueOptionCollectionNow(collection));
+	}
+
+	private async updateValueOptionCollectionNow(collection: ValueOptionCollection): Promise<void> {
 		const previous = this.plugin.settings.valueOptionCollections[collection.id];
 		if (!previous || previous.readonly) {
 			return;
@@ -218,6 +240,114 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 		this.plugin.settings.valueOptionCollections[collection.id] = normalized;
 		await this.plugin.saveSettings();
 		this.refresh();
+	}
+
+	async patchValueOption(
+		collectionId: string,
+		optionId: string,
+		patch: Partial<Omit<ValueOption, "id">>
+	): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.valueOptionCollections[collectionId];
+			if (!collection || collection.readonly || !collection.options.some((option) => option.id === optionId)) {
+				return false;
+			}
+			await this.updateValueOptionCollectionNow({
+				...collection,
+				options: collection.options.map((option) => option.id === optionId ? { ...option, ...patch } : option),
+			});
+			return true;
+		});
+	}
+
+	async appendValueOption(collectionId: string, option: ValueOption): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.valueOptionCollections[collectionId];
+			if (!collection || collection.readonly) {
+				return false;
+			}
+			await this.updateValueOptionCollectionNow({
+				...collection,
+				options: [...collection.options, option],
+			});
+			return true;
+		});
+	}
+
+	async removeValueOption(collectionId: string, optionId: string): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.valueOptionCollections[collectionId];
+			if (!collection || collection.readonly) {
+				return false;
+			}
+			await this.updateValueOptionCollectionNow({
+				...collection,
+				options: collection.options.filter((option) => option.id !== optionId),
+			});
+			return true;
+		});
+	}
+
+	async patchPropertyValueOption(
+		propertyName: string,
+		optionId: string,
+		patch: Partial<Omit<ValueOption, "id">>
+	): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const definition = this.getPropertyDefinition(propertyName);
+			const type = definition ? this.registry.get(definition.typeId) : null;
+			if (!definition || type?.optionSupport?.kind !== "value") {
+				return false;
+			}
+			const binding = type.optionSupport.getBinding(definition.config);
+			if (binding.mode !== "local" || !binding.options.some((option) => option.id === optionId)) {
+				return false;
+			}
+			await this.setPropertyDefinitionNow({
+				...definition,
+				config: type.optionSupport.setBinding(definition.config, {
+					...binding,
+					options: binding.options.map((option) => option.id === optionId ? { ...option, ...patch } : option),
+				}),
+			});
+			return true;
+		});
+	}
+
+	async appendPropertyValueOption(propertyName: string, option: ValueOption): Promise<boolean> {
+		return this.mutateLocalPropertyOptions(propertyName, (options) => [...options, option]);
+	}
+
+	async removePropertyValueOption(propertyName: string, optionId: string): Promise<boolean> {
+		return this.mutateLocalPropertyOptions(
+			propertyName,
+			(options) => options.filter((option) => option.id !== optionId)
+		);
+	}
+
+	private mutateLocalPropertyOptions(
+		propertyName: string,
+		mutate: (options: ValueOption[]) => ValueOption[]
+	): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const definition = this.getPropertyDefinition(propertyName);
+			const type = definition ? this.registry.get(definition.typeId) : null;
+			if (!definition || type?.optionSupport?.kind !== "value") {
+				return false;
+			}
+			const binding = type.optionSupport.getBinding(definition.config);
+			if (binding.mode !== "local") {
+				return false;
+			}
+			await this.setPropertyDefinitionNow({
+				...definition,
+				config: type.optionSupport.setBinding(definition.config, {
+					...binding,
+					options: mutate(binding.options),
+				}),
+			});
+			return true;
+		});
 	}
 
 	async removeValueOptionCollection(collectionId: string): Promise<boolean> {
@@ -291,6 +421,10 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 	}
 
 	async updateIconOptionCollection(collection: IconOptionCollection): Promise<void> {
+		await this.plugin.runSettingsMutation(() => this.updateIconOptionCollectionNow(collection));
+	}
+
+	private async updateIconOptionCollectionNow(collection: IconOptionCollection): Promise<void> {
 		const previous = this.plugin.settings.iconOptionCollections[collection.id];
 		if (!previous || previous.readonly) {
 			return;
@@ -298,6 +432,49 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 		this.plugin.settings.iconOptionCollections[collection.id] = this.plugin.catalogOptions.normalizeIconCollection(collection);
 		await this.plugin.saveSettings();
 		this.refresh();
+	}
+
+	async patchIconOption(
+		collectionId: string,
+		optionId: string,
+		patch: Partial<Omit<IconOption, "id">>
+	): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.iconOptionCollections[collectionId];
+			if (!collection || collection.readonly || !collection.options.some((option) => option.id === optionId)) {
+				return false;
+			}
+			await this.updateIconOptionCollectionNow({
+				...collection,
+				options: collection.options.map((option) => option.id === optionId ? { ...option, ...patch } : option),
+			});
+			return true;
+		});
+	}
+
+	async appendIconOption(collectionId: string, option: IconOption): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.iconOptionCollections[collectionId];
+			if (!collection || collection.readonly) {
+				return false;
+			}
+			await this.updateIconOptionCollectionNow({ ...collection, options: [...collection.options, option] });
+			return true;
+		});
+	}
+
+	async removeIconOption(collectionId: string, optionId: string): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.iconOptionCollections[collectionId];
+			if (!collection || collection.readonly) {
+				return false;
+			}
+			await this.updateIconOptionCollectionNow({
+				...collection,
+				options: collection.options.filter((option) => option.id !== optionId),
+			});
+			return true;
+		});
 	}
 
 	async removeIconOptionCollection(collectionId: string): Promise<boolean> {
@@ -357,6 +534,10 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 	}
 
 	async updateColorOptionCollection(collection: ColorOptionCollection): Promise<void> {
+		await this.plugin.runSettingsMutation(() => this.updateColorOptionCollectionNow(collection));
+	}
+
+	private async updateColorOptionCollectionNow(collection: ColorOptionCollection): Promise<void> {
 		const previous = this.plugin.settings.colorOptionCollections[collection.id];
 		if (!previous || previous.readonly) {
 			return;
@@ -364,6 +545,49 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 		this.plugin.settings.colorOptionCollections[collection.id] = this.plugin.catalogOptions.normalizeColorCollection(collection);
 		await this.plugin.saveSettings();
 		this.refresh();
+	}
+
+	async patchColorOption(
+		collectionId: string,
+		optionId: string,
+		patch: Partial<Omit<ColorOption, "id">>
+	): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.colorOptionCollections[collectionId];
+			if (!collection || collection.readonly || !collection.options.some((option) => option.id === optionId)) {
+				return false;
+			}
+			await this.updateColorOptionCollectionNow({
+				...collection,
+				options: collection.options.map((option) => option.id === optionId ? { ...option, ...patch } : option),
+			});
+			return true;
+		});
+	}
+
+	async appendColorOption(collectionId: string, option: ColorOption): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.colorOptionCollections[collectionId];
+			if (!collection || collection.readonly) {
+				return false;
+			}
+			await this.updateColorOptionCollectionNow({ ...collection, options: [...collection.options, option] });
+			return true;
+		});
+	}
+
+	async removeColorOption(collectionId: string, optionId: string): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const collection = this.plugin.settings.colorOptionCollections[collectionId];
+			if (!collection || collection.readonly) {
+				return false;
+			}
+			await this.updateColorOptionCollectionNow({
+				...collection,
+				options: collection.options.filter((option) => option.id !== optionId),
+			});
+			return true;
+		});
 	}
 
 	async removeColorOptionCollection(collectionId: string): Promise<boolean> {

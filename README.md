@@ -227,7 +227,7 @@ const handle = noteFields?.registerType<MyConfig>({
 });
 ```
 
-The API also exposes `createValueOption` plus collection CRUD methods: `getValueOptionCollections`, `getValueOptionCollection`, `createValueOptionCollection`, `updateValueOptionCollection`, and `removeValueOptionCollection`. Option IDs are framework-managed implementation details; plugins should preserve returned IDs when updating existing options.
+The API also exposes `createValueOption` plus collection CRUD methods: `getValueOptionCollections`, `getValueOptionCollection`, `createValueOptionCollection`, `updateValueOptionCollection`, and `removeValueOptionCollection`. Prefer `patchValueOption` or `patchPropertyValueOption` for editing one option so concurrent UI changes are applied atomically. Option IDs are framework-managed implementation details; plugins should preserve returned IDs when updating existing options.
 
 Icon and color integrations use the same collection-oriented API:
 
@@ -241,7 +241,7 @@ noteFields.openColorPicker(currentColor, async (color) => {
 });
 ```
 
-Plugins can manage curated sets with `createIconOptionCollection`, `updateIconOptionCollection`, `createColorOptionCollection`, and `updateColorOptionCollection`. Use `resolveIconOptions` or `resolveColorOptions` to build a custom UI while retaining NoteFields labels, aliases, and metadata.
+Plugins can manage curated sets with `createIconOptionCollection`, `updateIconOptionCollection`, `createColorOptionCollection`, and `updateColorOptionCollection`. Use `patchIconOption` and `patchColorOption` for atomic single-option edits. Use `resolveIconOptions` or `resolveColorOptions` to build a custom UI while retaining NoteFields labels, aliases, and metadata.
 
 Calling either resolver without a collection ID returns the merged catalog. Pass `getSystemIconCollectionId()` or `getSystemColorCollectionId()` to resolve only NoteFields' virtual built-in collection.
 

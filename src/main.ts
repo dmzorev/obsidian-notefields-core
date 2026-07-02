@@ -35,6 +35,8 @@ export default class NoteFieldsCorePlugin extends Plugin {
 	readonly valueOptions = new ValueOptionsService(this);
 
 	private readonly registry = new PropertyTypeRegistry();
+	private settingsMutationQueue: Promise<void> = Promise.resolve();
+	private settingsSaveQueue: Promise<void> = Promise.resolve();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -106,7 +108,19 @@ export default class NoteFieldsCorePlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+		const snapshot = structuredClone(this.settings);
+		const save = this.settingsSaveQueue.then(
+			() => this.saveData(snapshot),
+			() => this.saveData(snapshot)
+		);
+		this.settingsSaveQueue = save.then(() => undefined, () => undefined);
+		await save;
+	}
+
+	runSettingsMutation<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.settingsMutationQueue.then(operation, operation);
+		this.settingsMutationQueue = result.then(() => undefined, () => undefined);
+		return result;
 	}
 
 	collectOptions(propertyName: string, sourceFile?: TFile | null): ValueOption[] {

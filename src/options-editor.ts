@@ -15,6 +15,7 @@ import type {
 	ValueOptionCollection,
 	ValueOptionsEditorContext,
 } from "./types";
+import { bindDebouncedInput } from "./ui";
 
 interface EditorOptions {
 	showBinding?: boolean;
@@ -127,8 +128,7 @@ function renderValueOptionsEditorContent(
 				new Notice("This value type has no additional unique values.");
 				return;
 			}
-			const nextOptions = [...values, createValueOption(value)];
-			void updateOptions(plugin, context, binding, collection, valueType, nextOptions)
+			void appendOption(plugin, context, binding, collection, valueType, values, createValueOption(value))
 				.then(() => rerender(plugin, el, context, options));
 		});
 	}
@@ -248,14 +248,14 @@ function renderOptionRow(
 			value: formatOptionValue(option.value),
 		});
 		valueInput.disabled = Boolean(collection?.readonly);
-		valueInput.addEventListener("change", () => {
-			const nextValue = coerceOptionValue(valueInput.value, effectiveType);
+		bindDebouncedInput(valueInput, async (inputValue) => {
+			const nextValue = coerceOptionValue(inputValue, effectiveType);
 			if (nextValue === null) {
 				valueInput.value = formatOptionValue(option.value);
 				new Notice(`Expected a ${effectiveType} value.`);
 				return;
 			}
-			void patchOption(plugin, context, binding, collection, valueType, values, option.id, { value: nextValue });
+			await patchOption(plugin, context, binding, collection, valueType, values, option.id, { value: nextValue });
 		});
 	}
 
@@ -265,9 +265,9 @@ function renderOptionRow(
 		value: option.label ?? "",
 	});
 	labelInput.disabled = Boolean(collection?.readonly);
-	labelInput.addEventListener("change", () => {
-		void patchOption(plugin, context, binding, collection, valueType, values, option.id, {
-			label: labelInput.value.trim() || undefined,
+	bindDebouncedInput(labelInput, async (value) => {
+		await patchOption(plugin, context, binding, collection, valueType, values, option.id, {
+			label: value.trim() || undefined,
 		});
 	});
 
@@ -277,9 +277,9 @@ function renderOptionRow(
 		value: option.aliases?.join(", ") ?? "",
 	});
 	aliasesInput.disabled = Boolean(collection?.readonly);
-	aliasesInput.addEventListener("change", () => {
-		const aliases = aliasesInput.value.split(",").map((alias) => alias.trim()).filter(Boolean);
-		void patchOption(plugin, context, binding, collection, valueType, values, option.id, {
+	bindDebouncedInput(aliasesInput, async (value) => {
+		const aliases = value.split(",").map((alias) => alias.trim()).filter(Boolean);
+		await patchOption(plugin, context, binding, collection, valueType, values, option.id, {
 			aliases: aliases.length ? aliases : undefined,
 		});
 	});
@@ -317,15 +317,56 @@ function renderOptionRow(
 	setIcon(deleteButton, "lucide-trash-2");
 	deleteButton.disabled = Boolean(collection?.readonly);
 	deleteButton.addEventListener("click", () => {
-		void updateOptions(
-			plugin,
-			context,
-			binding,
-			collection,
-			valueType,
-			values.filter((candidate) => candidate.id !== option.id)
-		).then(() => rerender(plugin, parentEl.parentElement ?? parentEl, context, editorOptions));
+		void removeOption(plugin, context, binding, collection, valueType, values, option.id)
+			.then(() => rerender(plugin, parentEl.parentElement ?? parentEl, context, editorOptions));
 	});
+}
+
+async function appendOption(
+	plugin: NoteFieldsCorePlugin,
+	context: ValueOptionsEditorContext,
+	binding: ValueOptionBinding,
+	collection: ValueOptionCollection | null,
+	valueType: OptionValueType,
+	options: ValueOption[],
+	option: ValueOption
+): Promise<void> {
+	if (binding.mode === "shared") {
+		await plugin.api.appendValueOption(binding.collectionId, option);
+		return;
+	}
+	if (context.propertyName) {
+		await plugin.api.appendPropertyValueOption(context.propertyName, option);
+		return;
+	}
+	await updateOptions(plugin, context, binding, collection, valueType, [...options, option]);
+}
+
+async function removeOption(
+	plugin: NoteFieldsCorePlugin,
+	context: ValueOptionsEditorContext,
+	binding: ValueOptionBinding,
+	collection: ValueOptionCollection | null,
+	valueType: OptionValueType,
+	options: ValueOption[],
+	optionId: string
+): Promise<void> {
+	if (binding.mode === "shared") {
+		await plugin.api.removeValueOption(binding.collectionId, optionId);
+		return;
+	}
+	if (context.propertyName) {
+		await plugin.api.removePropertyValueOption(context.propertyName, optionId);
+		return;
+	}
+	await updateOptions(
+		plugin,
+		context,
+		binding,
+		collection,
+		valueType,
+		options.filter((option) => option.id !== optionId)
+	);
 }
 
 async function patchOption(
@@ -338,6 +379,14 @@ async function patchOption(
 	optionId: string,
 	patch: Partial<ValueOption>
 ): Promise<void> {
+	if (binding.mode === "shared") {
+		await plugin.api.patchValueOption(binding.collectionId, optionId, patch);
+		return;
+	}
+	if (context.propertyName) {
+		await plugin.api.patchPropertyValueOption(context.propertyName, optionId, patch);
+		return;
+	}
 	await updateOptions(plugin, context, binding, collection, valueType, options.map((option) => option.id === optionId
 		? { ...option, ...patch }
 		: option));
