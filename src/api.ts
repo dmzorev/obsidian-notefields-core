@@ -68,6 +68,8 @@ export class PropertyTypeRegistry {
 }
 
 export class NoteFieldsCoreApi implements NoteFieldsApi {
+	readonly apiVersion = 1 as const;
+
 	constructor(
 		private readonly plugin: NoteFieldsCorePlugin,
 		private readonly registry: PropertyTypeRegistry

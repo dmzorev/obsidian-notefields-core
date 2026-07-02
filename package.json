@@ -3,6 +3,7 @@
 	"version": "1.0.1",
 	"description": "Extensible rich property types and editors for Obsidian notes.",
 	"main": "main.js",
+	"types": "src/public-api.ts",
 	"type": "module",
 	"author": "Dmitry Zorev",
 	"homepage": "https://github.com/dmzorev/notefields-core#readme",

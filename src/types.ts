@@ -227,6 +227,7 @@ export interface ValueOptionsEditorContext {
 }
 
 export interface NoteFieldsApi {
+	readonly apiVersion: 1;
 	getPropertyDefinition: (propertyName: string) => PropertyDefinition | null;
 	getPropertyDefinitions: () => PropertyDefinition[];
 	setPropertyDefinition: (definition: PropertyDefinition) => Promise<void>;
