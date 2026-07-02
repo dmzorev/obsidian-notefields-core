@@ -93,7 +93,23 @@ export function normalizeDefinition(definition: PropertyDefinition): PropertyDef
 		property: definition.property.trim(),
 		typeId,
 		visibility: normalizePropertyVisibility(definition.visibility),
+		managedBy: normalizeManagedPropertyBinding(definition.managedBy),
 		config,
+	};
+}
+
+function normalizeManagedPropertyBinding(value: unknown): PropertyDefinition["managedBy"] {
+	if (!value || typeof value !== "object") {
+		return undefined;
+	}
+	const binding = value as Partial<NonNullable<PropertyDefinition["managedBy"]>>;
+	if (!binding.ownerPluginId?.trim() || !binding.presetId?.trim()) {
+		return undefined;
+	}
+	return {
+		ownerPluginId: binding.ownerPluginId.trim(),
+		presetId: binding.presetId.trim(),
+		lockType: binding.lockType !== false,
 	};
 }
 
@@ -155,7 +171,7 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 
 	private renderTypeMenuVisibility(containerEl: HTMLElement): void {
 		const listEl = containerEl.createDiv({ cls: "props-framework-settings-list" });
-		for (const type of this.plugin.api.getRegisteredTypes()) {
+		for (const type of this.plugin.api.getRegisteredTypes().filter((candidate) => candidate.typeMenuVisibility !== "hidden")) {
 			new Setting(listEl)
 				.setName(type.name)
 				.setDesc(type.id)
@@ -200,11 +216,16 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 
 	private renderDefinitionRow(parentEl: HTMLElement, definition: PropertyDefinition): void {
 		const type = this.plugin.adapter?.getPropertyType(definition.property);
+		const locked = definition.managedBy?.lockType === true;
 		const rowEl = this.createListRow(
 			parentEl,
-			type?.icon ?? "lucide-file-question",
-			`Property type: ${type?.name ?? "Text"}`,
-			(event) => this.openPropertyTypeMenu(event, definition)
+			locked ? "lucide-lock-keyhole" : type?.icon ?? "lucide-file-question",
+			locked
+				? `Managed by ${definition.managedBy?.ownerPluginId ?? "plugin"}`
+				: `Property type: ${type?.name ?? "Text"}`,
+			(event) => {
+				if (!locked) this.openPropertyTypeMenu(event, definition);
+			}
 		);
 
 		this.renderListSummary(rowEl, definition.displayTitle?.trim() || definition.property, definition.property, () => {
@@ -219,9 +240,11 @@ export class NoteFieldsSettingTab extends PluginSettingTab {
 				new PropertySettingsModal(this.plugin, definition.property).open();
 			});
 		}
-		this.createActionButton(actionsEl, "lucide-trash-2", "Remove property", () => {
-			void this.plugin.api.removePropertyDefinition(definition.property).then(() => this.display());
-		}, true);
+		if (!definition.managedBy) {
+			this.createActionButton(actionsEl, "lucide-trash-2", "Remove property", () => {
+				void this.plugin.api.removePropertyDefinition(definition.property).then(() => this.display());
+			}, true);
+		}
 	}
 
 	private openPropertyTypeMenu(event: MouseEvent, definition: PropertyDefinition): void {

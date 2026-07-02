@@ -27,6 +27,8 @@ import type {
 	PropertyTypeHandle,
 	PropertyTypeId,
 	PropertyTypeRegistration,
+	PropertyPresetRegistration,
+	PropertyPresetSyncResult,
 	NoteFieldsApi,
 	ValueOption,
 	ValueOptionBinding,
@@ -89,13 +91,20 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 	}
 
 	private async setPropertyDefinitionNow(definition: PropertyDefinition): Promise<void> {
-		const normalized = normalizeDefinition(definition);
+		let normalized = normalizeDefinition(definition);
 		const key = normalizePropertyName(normalized.property);
 		if (!key) {
 			return;
 		}
 
 		const previous = this.plugin.settings.properties[key];
+		if (previous?.managedBy?.lockType) {
+			normalized = {
+				...normalized,
+				typeId: previous.typeId,
+				managedBy: previous.managedBy,
+			};
+		}
 		if (previous) {
 			const type = this.registry.get(previous.typeId);
 			const nextType = this.registry.get(normalized.typeId);
@@ -136,6 +145,9 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 			return;
 		}
 
+		if (this.plugin.settings.properties[key]?.managedBy) {
+			return;
+		}
 		delete this.plugin.settings.properties[key];
 		await this.plugin.saveSettings();
 		this.refresh();
@@ -161,6 +173,84 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 				this.refresh();
 			},
 		};
+	}
+
+	getPropertyPreset(ownerPluginId: string, presetId: string): PropertyDefinition | null {
+		return Object.values(this.plugin.settings.properties).find((definition) =>
+			definition.managedBy?.ownerPluginId === ownerPluginId
+			&& definition.managedBy.presetId === presetId
+		) ?? null;
+	}
+
+	async syncPropertyPreset<TConfig = unknown>(
+		registration: PropertyPresetRegistration<TConfig>
+	): Promise<PropertyPresetSyncResult> {
+		return this.plugin.runSettingsMutation(async () => {
+			const property = registration.property.trim();
+			const ownerPluginId = registration.ownerPluginId.trim();
+			const presetId = registration.id.trim();
+			if (!property || !ownerPluginId || !presetId) {
+				throw new Error("Property preset requires an id, owner plugin id, and property name.");
+			}
+			if (!this.registry.get(registration.typeId)) {
+				throw new Error(`Property preset type "${registration.typeId}" is not registered.`);
+			}
+
+			const targetKey = normalizePropertyName(property);
+			const current = this.getPropertyPreset(ownerPluginId, presetId);
+			const target = this.plugin.settings.properties[targetKey];
+			const ownsTarget = target?.managedBy?.ownerPluginId === ownerPluginId
+				&& target.managedBy.presetId === presetId;
+			if (target && !ownsTarget && !registration.force) {
+				return { status: "conflict", conflict: target };
+			}
+
+			const status = target && !ownsTarget
+				? "adopted"
+				: current && normalizePropertyName(current.property) !== targetKey
+					? "moved"
+					: current
+						? "updated"
+						: "created";
+			const base = ownsTarget ? target : current;
+			const definition = normalizeDefinition({
+				...(base ?? {}),
+				property,
+				typeId: registration.typeId,
+				config: registration.config,
+				icon: base?.icon ?? registration.icon,
+				displayTitle: base?.displayTitle ?? registration.displayTitle,
+				visibility: base?.visibility ?? registration.visibility ?? "hidden",
+				managedBy: {
+					ownerPluginId,
+					presetId,
+					lockType: registration.lockType !== false,
+				},
+			});
+
+			if (current && normalizePropertyName(current.property) !== targetKey) {
+				delete this.plugin.settings.properties[normalizePropertyName(current.property)];
+			}
+			this.plugin.settings.properties[targetKey] = definition;
+			await this.plugin.saveSettings();
+			this.plugin.adapter?.updateReservedKeys(registration.typeId);
+			this.refresh();
+			return { status, definition };
+		});
+	}
+
+	async removePropertyPreset(ownerPluginId: string, presetId: string): Promise<boolean> {
+		return this.plugin.runSettingsMutation(async () => {
+			const definition = this.getPropertyPreset(ownerPluginId, presetId);
+			if (!definition) {
+				return false;
+			}
+			delete this.plugin.settings.properties[normalizePropertyName(definition.property)];
+			await this.plugin.saveSettings();
+			this.plugin.adapter?.updateReservedKeys(definition.typeId);
+			this.refresh();
+			return true;
+		});
 	}
 
 	validateValue(propertyName: string, value: unknown): PropertyValidationResult {

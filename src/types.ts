@@ -49,6 +49,7 @@ export interface PropertyType<TConfig = unknown> {
 	renderBase?: (el: HTMLElement, ctx: PropertyRenderContext<TConfig>) => PropertyWidgetComponent;
 	renderSettings?: (el: HTMLElement, ctx: PropertySettingsContext<TConfig>) => void;
 	optionSupport?: PropertyOptionSupport<TConfig>;
+	typeMenuVisibility?: "visible" | "hidden";
 }
 
 export interface PropertyTypeRegistration<TConfig = unknown> extends PropertyType<TConfig> {
@@ -172,13 +173,41 @@ export type BuiltInPropertyTypeId =
 
 export type PropertyVisibility = "visible" | "hidden" | "hidden-when-empty";
 
+export interface ManagedPropertyBinding {
+	ownerPluginId: string;
+	presetId: string;
+	lockType: boolean;
+}
+
 export interface PropertyDefinition<TConfig = unknown> {
 	property: string;
 	typeId: PropertyTypeId;
 	icon?: string;
 	displayTitle?: string;
 	visibility?: PropertyVisibility;
+	managedBy?: ManagedPropertyBinding;
 	config: TConfig;
+}
+
+export interface PropertyPresetRegistration<TConfig = unknown> {
+	id: string;
+	ownerPluginId: string;
+	property: string;
+	typeId: PropertyTypeId;
+	config: TConfig;
+	icon?: string;
+	displayTitle?: string;
+	visibility?: PropertyVisibility;
+	lockType?: boolean;
+	force?: boolean;
+}
+
+export type PropertyPresetSyncStatus = "created" | "updated" | "moved" | "adopted" | "conflict";
+
+export interface PropertyPresetSyncResult {
+	status: PropertyPresetSyncStatus;
+	definition?: PropertyDefinition;
+	conflict?: PropertyDefinition;
 }
 
 export interface PropertySettingsContext<TConfig = unknown> {
@@ -239,6 +268,9 @@ export interface NoteFieldsApi {
 	getRegisteredType: <TConfig = unknown>(typeId: PropertyTypeId) => PropertyType<TConfig> | null;
 	getRegisteredTypes: () => PropertyType[];
 	registerType: <TConfig = unknown>(registration: PropertyTypeRegistration<TConfig>) => PropertyTypeHandle;
+	getPropertyPreset: (ownerPluginId: string, presetId: string) => PropertyDefinition | null;
+	syncPropertyPreset: <TConfig = unknown>(registration: PropertyPresetRegistration<TConfig>) => Promise<PropertyPresetSyncResult>;
+	removePropertyPreset: (ownerPluginId: string, presetId: string) => Promise<boolean>;
 	validateValue: (propertyName: string, value: unknown) => PropertyValidationResult;
 	getOptions: (propertyName: string, sourceFile?: TFile | null) => ValueOption[];
 	createValueOption: (input: ValueOptionInput) => ValueOption;

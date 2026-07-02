@@ -126,7 +126,8 @@ export default class NoteFieldsCorePlugin extends Plugin {
 	}
 
 	isPropertyTypeVisible(typeId: string): boolean {
-		return this.settings.propertyTypeMenuVisibility[typeId] !== false;
+		return this.api.getRegisteredType(typeId)?.typeMenuVisibility !== "hidden"
+			&& this.settings.propertyTypeMenuVisibility[typeId] !== false;
 	}
 
 	async setPropertyTypeMenuVisibility(typeId: string, visible: boolean): Promise<void> {

@@ -168,6 +168,9 @@ export class ObsidianPropertyAdapter {
 	}
 
 	async setPropertyType(propertyName: string, typeId: string): Promise<void> {
+		if (this.plugin.api.getPropertyDefinition(propertyName)?.managedBy?.lockType) {
+			return;
+		}
 		const choice = this.getPropertyTypeChoices(propertyName).find((candidate) => candidate.id === typeId);
 		if (!choice || !this.metadataTypeManager?.setType) {
 			return;
@@ -220,10 +223,12 @@ export class ObsidianPropertyAdapter {
 		if (!this.originalWidgetDescriptors.has(typeId)) {
 			this.originalWidgetDescriptors.set(typeId, Object.getOwnPropertyDescriptor(widgets, typeId));
 		}
+		const widget = this.createWidget(typeId);
+		widget.reservedKeys = this.getReservedKeys(typeId);
 		Object.defineProperty(widgets, typeId, {
 			configurable: true,
 			enumerable: this.plugin.isPropertyTypeVisible(typeId),
-			value: this.createWidget(typeId),
+			value: widget,
 			writable: true,
 		});
 	}
@@ -256,6 +261,20 @@ export class ObsidianPropertyAdapter {
 		});
 	}
 
+	updateReservedKeys(typeId: string): void {
+		const widget = this.metadataTypeManager?.registeredTypeWidgets?.[typeId];
+		if (widget) {
+			widget.reservedKeys = this.getReservedKeys(typeId);
+		}
+	}
+
+	private getReservedKeys(typeId: string): string[] | undefined {
+		const keys = this.plugin.api.getPropertyDefinitions()
+			.filter((definition) => definition.typeId === typeId && definition.managedBy?.lockType)
+			.map((definition) => definition.property);
+		return keys.length ? keys : undefined;
+	}
+
 	private patchSetType(): void {
 		if (!this.metadataTypeManager?.setType || this.originalSetType) {
 			return;
@@ -268,6 +287,9 @@ export class ObsidianPropertyAdapter {
 		const originalSetType = (propertyName: string, typeId: string): void => setType.call(manager, propertyName, typeId);
 		this.originalSetType = originalSetType;
 		manager.setType = (propertyName, typeId): void => {
+			if (this.plugin.api.getPropertyDefinition(propertyName)?.managedBy?.lockType) {
+				return;
+			}
 			originalSetType(propertyName, typeId);
 			if (!this.isApplyingType) {
 				this.syncDefinitionForAssignedType(propertyName, typeId);
@@ -276,6 +298,9 @@ export class ObsidianPropertyAdapter {
 	}
 
 	private syncDefinitionForAssignedType(propertyName: string, typeId: string): void {
+		if (this.plugin.api.getPropertyDefinition(propertyName)?.managedBy?.lockType) {
+			return;
+		}
 		if (this.plugin.api.getRegisteredType(typeId)) {
 			this.plugin.ensurePropertyDefinition(propertyName, typeId);
 			return;
@@ -566,6 +591,11 @@ export class PropertyBasicsModal extends Modal {
 		new Setting(this.contentEl)
 			.setName("Property display")
 			.setHeading();
+		if (definition.managedBy) {
+			new Setting(this.contentEl)
+				.setName("Managed property")
+				.setDesc(`This property is managed by ${definition.managedBy.ownerPluginId}. Its name and type are configured there.`);
+		}
 
 		new Setting(this.contentEl)
 			.setName("Property name")
@@ -574,7 +604,9 @@ export class PropertyBasicsModal extends Modal {
 				text
 					.setPlaceholder(definition.property)
 					.setValue(definition.property);
+				text.setDisabled(Boolean(definition.managedBy?.lockType));
 				text.inputEl.addEventListener("change", () => {
+					if (definition.managedBy?.lockType) return;
 					const nextProperty = text.inputEl.value.trim();
 					if (!nextProperty || nextProperty === definition.property) {
 						text.setValue(definition.property);
@@ -603,6 +635,7 @@ export class PropertyBasicsModal extends Modal {
 				button
 					.setButtonText(current?.name ?? "Text")
 					.setIcon(current?.icon ?? "lucide-text")
+					.setDisabled(Boolean(definition.managedBy?.lockType))
 					.onClick((event) => {
 						const choices = (this.plugin.adapter?.getPropertyTypeChoices(definition.property) ?? []).map((choice) => ({
 							...choice,
