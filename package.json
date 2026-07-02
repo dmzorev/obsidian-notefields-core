@@ -1,6 +1,6 @@
 {
 	"name": "notefields-core",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Extensible rich property types and editors for Obsidian notes.",
 	"main": "main.js",
 	"type": "module",
