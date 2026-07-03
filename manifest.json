@@ -1,7 +1,7 @@
 {
 	"id": "notefields-core",
 	"name": "NoteFields Core",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"minAppVersion": "1.6.7",
 	"description": "Adds richer note property types, editors, validation, icons, colors, and an API for extending Obsidian properties.",
 	"author": "Dmitry Zorev",
