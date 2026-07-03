@@ -78,6 +78,7 @@ export class ObsidianPropertyAdapter {
 	}
 
 	unload(): void {
+		clearDisplayedTitlePositioners();
 		this.metadataSurface.unload();
 		if (!this.metadataTypeManager?.registeredTypeWidgets) {
 			return;
@@ -129,6 +130,10 @@ export class ObsidianPropertyAdapter {
 				metadataEditor.synchronize(data);
 			}
 		}
+		this.metadataSurface.refreshSoon();
+	}
+
+	refreshPropertyBlockActions(): void {
 		this.metadataSurface.refreshSoon();
 	}
 
@@ -493,7 +498,11 @@ export class ObsidianPropertyAdapter {
 		keyInputEl.title = definition.property;
 
 		const keyContainerEl = keyInputEl.parentElement;
-		keyContainerEl?.querySelector(".props-framework-displayed-title")?.remove();
+		const previousTitleEl = keyContainerEl?.querySelector<HTMLElement>(".props-framework-displayed-title");
+		if (previousTitleEl) {
+			disposeDisplayedTitlePositioner(previousTitleEl);
+			previousTitleEl.remove();
+		}
 		const title = definition.displayTitle?.trim();
 		keyInputEl.removeClass("props-framework-has-displayed-title");
 		if (!title || !keyContainerEl) {
@@ -777,19 +786,44 @@ function positionDisplayedTitle(
 	titleEl: HTMLElement,
 	iconEl: HTMLElement | null
 ): void {
+	let frame = 0;
+	let disposed = false;
+	const timeouts: number[] = [];
+
 	const update = (): void => {
+		frame = 0;
+		if (disposed) {
+			return;
+		}
+		if (!titleEl.isConnected) {
+			cleanup();
+			return;
+		}
 		const inputRect = inputEl.getBoundingClientRect();
 		const containerRect = containerEl.getBoundingClientRect();
 		if (inputRect.width === 0 || inputRect.height === 0) {
+			titleEl.addClass("is-layout-pending");
 			return;
 		}
+		titleEl.removeClass("is-layout-pending");
 
 		const inputStyle = window.getComputedStyle(inputEl);
 		const paddingLeft = Number.parseFloat(inputStyle.paddingLeft) || 0;
 		const paddingRight = Number.parseFloat(inputStyle.paddingRight) || 0;
-		const iconRect = iconEl?.getBoundingClientRect();
+		const iconSvgEl = iconEl?.querySelector("svg");
+		const iconContainerRect = iconEl?.getBoundingClientRect();
+		const iconSvgRect = iconSvgEl?.getBoundingClientRect();
+		const iconRect = iconSvgRect && iconSvgRect.width > 0
+			? iconSvgRect
+			: iconContainerRect && iconContainerRect.width > 0
+				? iconContainerRect
+				: null;
 		const inputTextLeft = inputRect.left + paddingLeft;
-		const iconTextLeft = iconRect ? iconRect.right + 6 : inputTextLeft;
+		const iconTextLeft = iconRect
+			? iconRect.right + 6
+			: iconEl
+				? inputTextLeft + 26
+				: inputTextLeft;
 		const textLeft = Math.max(inputTextLeft, iconTextLeft);
 		const textRight = inputRect.right - paddingRight;
 
@@ -804,6 +838,54 @@ function positionDisplayedTitle(
 		titleEl.style.lineHeight = inputStyle.lineHeight;
 	};
 
+	const schedule = (): void => {
+		if (!disposed && frame === 0) {
+			frame = window.requestAnimationFrame(update);
+		}
+	};
+	const resizeObserver = new ResizeObserver(schedule);
+	resizeObserver.observe(inputEl);
+	resizeObserver.observe(containerEl);
+	if (iconEl) {
+		resizeObserver.observe(iconEl);
+	}
+	const rowEl = containerEl.closest(".metadata-property") ?? containerEl;
+	const mutationObserver = new MutationObserver(schedule);
+	mutationObserver.observe(rowEl, { childList: true, subtree: true });
+
+	const cleanup = (): void => {
+		if (disposed) {
+			return;
+		}
+		disposed = true;
+		if (frame !== 0) {
+			window.cancelAnimationFrame(frame);
+		}
+		for (const timeout of timeouts) {
+			window.clearTimeout(timeout);
+		}
+		resizeObserver.disconnect();
+		mutationObserver.disconnect();
+		displayedTitlePositioners.delete(titleEl);
+	};
+
+	displayedTitlePositioners.set(titleEl, cleanup);
 	update();
-	window.requestAnimationFrame(update);
+	schedule();
+	for (const delay of [50, 150, 400]) {
+		timeouts.push(window.setTimeout(schedule, delay));
+	}
+}
+
+const displayedTitlePositioners = new Map<HTMLElement, () => void>();
+
+function disposeDisplayedTitlePositioner(titleEl: HTMLElement): void {
+	displayedTitlePositioners.get(titleEl)?.();
+}
+
+function clearDisplayedTitlePositioners(): void {
+	for (const cleanup of displayedTitlePositioners.values()) {
+		cleanup();
+	}
+	displayedTitlePositioners.clear();
 }

@@ -1,10 +1,12 @@
 import { MarkdownView, setIcon } from "obsidian";
 import type NoteFieldsCorePlugin from "./main";
-import type { PropertyDefinition } from "./types";
+import type { PropertyBlockActionContext, PropertyDefinition } from "./types";
 
 const CONTAINER_SELECTOR = ".metadata-container";
 const PROPERTY_SELECTOR = ".metadata-property";
 const TOGGLE_CLASS = "notefields-hidden-properties-toggle";
+const ACTION_BAR_CLASS = "notefields-property-block-actions";
+const ACTION_CLASS = "notefields-property-block-action";
 
 export class MetadataSurfaceController {
 	private readonly observers = new Map<HTMLElement, MutationObserver>();
@@ -114,6 +116,8 @@ export class MetadataSurfaceController {
 		}
 
 		this.updateToggle(containerEl, hiddenCount);
+		this.updateRegisteredActions(containerEl);
+		this.removeEmptyActionBar(containerEl);
 	}
 
 	private getDefinition(propertyEl: HTMLElement): PropertyDefinition | null {
@@ -134,12 +138,14 @@ export class MetadataSurfaceController {
 		}
 
 		if (!(buttonEl instanceof HTMLButtonElement)) {
-			const headingEl = containerEl.querySelector(".metadata-properties-heading") ?? containerEl;
+			const actionBarEl = this.getActionBar(containerEl);
 			buttonEl = document.createElement("button");
 			buttonEl.type = "button";
 			buttonEl.addClass("clickable-icon");
 			buttonEl.addClass(TOGGLE_CLASS);
-			buttonEl.addEventListener("pointerdown", (event) => event.stopPropagation());
+			for (const eventName of ["pointerdown", "pointerup", "mousedown", "mouseup", "dblclick"]) {
+				buttonEl.addEventListener(eventName, (event) => event.stopPropagation());
+			}
 			buttonEl.addEventListener("click", (event) => {
 				event.preventDefault();
 				event.stopPropagation();
@@ -149,12 +155,11 @@ export class MetadataSurfaceController {
 				);
 				this.schedule(containerEl);
 			});
-			headingEl.after(buttonEl);
-		}
-
-		const headingEl = containerEl.querySelector(".metadata-properties-heading");
-		if (headingEl && buttonEl.previousElementSibling !== headingEl) {
-			headingEl.after(buttonEl);
+			buttonEl.addEventListener("keydown", (event) => event.stopPropagation());
+			actionBarEl.append(buttonEl);
+		} else {
+			const actionBarEl = this.getActionBar(containerEl);
+			if (buttonEl.parentElement !== actionBarEl) actionBarEl.prepend(buttonEl);
 		}
 		for (const staleIcon of Array.from(buttonEl.querySelectorAll(":scope > svg"))) {
 			staleIcon.remove();
@@ -191,8 +196,82 @@ export class MetadataSurfaceController {
 		buttonEl.setAttribute("aria-pressed", String(shown));
 	}
 
+	private updateRegisteredActions(containerEl: HTMLElement): void {
+		const context = this.createActionContext(containerEl);
+		const actions = this.plugin.api.getPropertyBlockActions(context);
+		const expected = new Set(actions.map((action) => `${action.ownerPluginId}:${action.id}`));
+		const existing = new Map<string, HTMLButtonElement>();
+		for (const element of Array.from(containerEl.querySelectorAll<HTMLButtonElement>(`.${ACTION_CLASS}`))) {
+			const key = element.dataset.notefieldsAction;
+			if (key) existing.set(key, element);
+		}
+
+		for (const [key, buttonEl] of existing) {
+			if (!expected.has(key)) buttonEl.remove();
+		}
+		if (actions.length === 0) return;
+
+		const actionBarEl = this.getActionBar(containerEl);
+		let previousEl: Element | null = actionBarEl.querySelector(`.${TOGGLE_CLASS}`);
+		for (const action of actions) {
+			const key = `${action.ownerPluginId}:${action.id}`;
+			let buttonEl = existing.get(key);
+			if (!buttonEl?.isConnected) {
+				buttonEl = actionBarEl.createEl("button", {
+					attr: { type: "button" },
+					cls: ["clickable-icon", ACTION_CLASS],
+				});
+				buttonEl.dataset.notefieldsAction = key;
+				stopActionPropagation(buttonEl);
+				buttonEl.addEventListener("click", (event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					const currentContext = this.createActionContext(containerEl);
+					const current = this.plugin.api.getPropertyBlockActions(currentContext)
+						.find((candidate) => `${candidate.ownerPluginId}:${candidate.id}` === key);
+					if (current) void current.onClick(currentContext);
+				});
+			}
+			buttonEl.title = action.title;
+			buttonEl.setAttribute("aria-label", action.title);
+			if (buttonEl.dataset.notefieldsIcon !== action.icon) {
+				buttonEl.empty();
+				setIcon(buttonEl, action.icon);
+				buttonEl.dataset.notefieldsIcon = action.icon;
+			}
+			const expectedNext = previousEl?.nextElementSibling ?? actionBarEl.firstElementChild;
+			if (buttonEl !== expectedNext) actionBarEl.insertBefore(buttonEl, expectedNext);
+			previousEl = buttonEl;
+		}
+	}
+
+	private getActionBar(containerEl: HTMLElement): HTMLElement {
+		let actionBarEl = containerEl.querySelector<HTMLElement>(`:scope > .${ACTION_BAR_CLASS}`);
+		if (!actionBarEl) {
+			actionBarEl = containerEl.createDiv({ cls: ACTION_BAR_CLASS });
+		}
+		return actionBarEl;
+	}
+
+	private removeEmptyActionBar(containerEl: HTMLElement): void {
+		const actionBarEl = containerEl.querySelector<HTMLElement>(`:scope > .${ACTION_BAR_CLASS}`);
+		if (actionBarEl && actionBarEl.childElementCount === 0) actionBarEl.remove();
+	}
+
+	private createActionContext(containerEl: HTMLElement): PropertyBlockActionContext {
+		let file = null;
+		for (const leaf of this.plugin.app.workspace.getLeavesOfType("markdown")) {
+			if (leaf.view instanceof MarkdownView && leaf.view.containerEl.contains(containerEl)) {
+				file = leaf.view.file;
+				break;
+			}
+		}
+		return { app: this.plugin.app, file, containerEl };
+	}
+
 	private cleanupContainer(containerEl: HTMLElement): void {
 		containerEl.removeClass("notefields-show-hidden-properties");
+		containerEl.querySelector(`.${ACTION_BAR_CLASS}`)?.remove();
 		containerEl.querySelector(`.${TOGGLE_CLASS}`)?.remove();
 		for (const row of Array.from(containerEl.querySelectorAll(PROPERTY_SELECTOR))) {
 			if (row instanceof HTMLElement) {
@@ -205,6 +284,13 @@ export class MetadataSurfaceController {
 			}
 		}
 	}
+}
+
+function stopActionPropagation(buttonEl: HTMLButtonElement): void {
+	for (const eventName of ["pointerdown", "pointerup", "mousedown", "mouseup", "dblclick"]) {
+		buttonEl.addEventListener(eventName, (event) => event.stopPropagation());
+	}
+	buttonEl.addEventListener("keydown", (event) => event.stopPropagation());
 }
 
 function getPropertyName(propertyEl: HTMLElement): string | null {

@@ -23,7 +23,27 @@ The public type surface is exported from `src/public-api.ts`. The runtime object
 | `registerType(registration)` | Registers a type and returns a disposable handle. |
 | `validateValue(name, value)` | Validates a value using the property's current type. |
 
+Set `typeMenuVisibility: "hidden"` on a type registration when it is an implementation detail that must keep rendering existing definitions but must never appear in property type selectors.
+
+## Managed property presets
+
+Managed presets let an extension bind a hidden type to a global property name without exposing that type for manual assignment.
+
+| Method | Description |
+| --- | --- |
+| `getPropertyPreset(ownerPluginId, presetId)` | Returns the definition currently owned by a preset. |
+| `syncPropertyPreset(registration)` | Creates, updates, moves, or adopts an owned definition. Returns a conflict instead of overwriting another definition. |
+| `removePropertyPreset(ownerPluginId, presetId)` | Releases the owned definition without deleting frontmatter values. |
+
+A preset definition stores `managedBy.ownerPluginId`, `managedBy.presetId`, and `managedBy.lockType`. Locked definitions cannot be renamed, removed, or assigned another type through regular Core controls. Their display title, icon, visibility, and type-specific config can still be edited. The initial visibility defaults to `hidden`, but later synchronization preserves the user's visibility choice.
+
 `PropertyDefinition.visibility` accepts `visible`, `hidden`, or `hidden-when-empty`. It controls note Properties presentation only; it does not remove frontmatter or hide Bases columns. The field is optional for API compatibility and defaults to `visible` during normalization.
+
+## Property block actions
+
+`registerPropertyBlockAction(registration)` adds a disposable icon action to the right side of the Properties heading. Actions receive the current `TFile`, the metadata container, and the Obsidian app. Use `isVisible(context)` for note-specific availability and dispose the returned handle when the extension unloads.
+
+The action zone is shared with Core's hidden-property toggle, so extensions should use this API instead of inserting buttons into `.metadata-properties-heading` directly.
 
 ## Value options
 

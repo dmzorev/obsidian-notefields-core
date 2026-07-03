@@ -319,6 +319,10 @@ button.props-framework-icon-chip.is-empty:hover {
 	white-space: nowrap;
 }
 
+.props-framework-displayed-title.is-layout-pending {
+	visibility: hidden;
+}
+
 .props-framework-custom-input {
 	min-width: 140px;
 }
@@ -906,10 +910,28 @@ button.notefields-hidden-properties-toggle {
 	width: auto;
 	min-width: var(--clickable-icon-size);
 	height: var(--clickable-icon-size);
-	margin-inline-start: 4px;
+	margin-inline-start: 0;
 	padding: 0 5px;
 	color: var(--text-muted);
 	vertical-align: middle;
+}
+
+.metadata-container:has(> .notefields-property-block-actions) {
+	position: relative;
+}
+
+.notefields-property-block-actions {
+	position: absolute;
+	z-index: 4;
+	top: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.notefields-property-block-actions > .clickable-icon {
+	flex: 0 0 auto;
 }
 
 .notefields-hidden-properties-icon {

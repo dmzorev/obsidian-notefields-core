@@ -230,6 +230,26 @@ export interface PropertyTypeHandle {
 	dispose: () => void;
 }
 
+export interface PropertyBlockActionContext {
+	app: App;
+	file: TFile | null;
+	containerEl: HTMLElement;
+}
+
+export interface PropertyBlockActionRegistration {
+	id: string;
+	ownerPluginId: string;
+	icon: string;
+	title: string;
+	order?: number;
+	isVisible?: (context: PropertyBlockActionContext) => boolean;
+	onClick: (context: PropertyBlockActionContext) => void | Promise<void>;
+}
+
+export interface PropertyBlockActionHandle {
+	dispose: () => void;
+}
+
 export interface CreateValueOptionCollectionInput {
 	name: string;
 	valueType?: OptionValueType;
@@ -268,6 +288,7 @@ export interface NoteFieldsApi {
 	getRegisteredType: <TConfig = unknown>(typeId: PropertyTypeId) => PropertyType<TConfig> | null;
 	getRegisteredTypes: () => PropertyType[];
 	registerType: <TConfig = unknown>(registration: PropertyTypeRegistration<TConfig>) => PropertyTypeHandle;
+	registerPropertyBlockAction: (registration: PropertyBlockActionRegistration) => PropertyBlockActionHandle;
 	getPropertyPreset: (ownerPluginId: string, presetId: string) => PropertyDefinition | null;
 	syncPropertyPreset: <TConfig = unknown>(registration: PropertyPresetRegistration<TConfig>) => Promise<PropertyPresetSyncResult>;
 	removePropertyPreset: (ownerPluginId: string, presetId: string) => Promise<boolean>;

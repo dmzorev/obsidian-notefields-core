@@ -119,6 +119,8 @@ After NoteFields Core is available in the Obsidian Community Plugins directory:
 
 NoteFields Core can be extended by other Obsidian plugins. Extensions can add new field types, validation, settings, note renderers, Bases renderers, and integrations with reusable value, icon, and color collections.
 
+Extensions can also register managed property presets: plugin-owned properties bound globally by name, backed by hidden field types, and protected from accidental type changes.
+
 This API is primarily for plugin developers. See the [developer documentation](docs/developer/index.md) and the [NoteFields Rating reference plugin](https://github.com/dmzorev/obsidian-notefields-rating) for a complete independent integration.
 
 ## Documentation

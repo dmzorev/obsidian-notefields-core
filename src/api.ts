@@ -12,6 +12,9 @@ import { ColorPickerModal, IconPickerModal } from "./pickers";
 import { normalizeDefinition, normalizePropertyName } from "./settings";
 import type {
 	PropertyDefinition,
+	PropertyBlockActionContext,
+	PropertyBlockActionHandle,
+	PropertyBlockActionRegistration,
 	ColorOption,
 	ColorOptionCollection,
 	ColorOptionInput,
@@ -71,6 +74,7 @@ export class PropertyTypeRegistry {
 
 export class NoteFieldsCoreApi implements NoteFieldsApi {
 	readonly apiVersion = 1 as const;
+	private readonly propertyBlockActions = new Map<string, PropertyBlockActionRegistration>();
 
 	constructor(
 		private readonly plugin: NoteFieldsCorePlugin,
@@ -173,6 +177,27 @@ export class NoteFieldsCoreApi implements NoteFieldsApi {
 				this.refresh();
 			},
 		};
+	}
+
+	registerPropertyBlockAction(registration: PropertyBlockActionRegistration): PropertyBlockActionHandle {
+		const key = `${registration.ownerPluginId}:${registration.id}`;
+		this.propertyBlockActions.set(key, registration);
+		this.plugin.adapter?.refreshPropertyBlockActions();
+		return {
+			dispose: () => {
+				if (this.propertyBlockActions.get(key) === registration) {
+					this.propertyBlockActions.delete(key);
+					this.plugin.adapter?.refreshPropertyBlockActions();
+				}
+			},
+		};
+	}
+
+	getPropertyBlockActions(context: PropertyBlockActionContext): PropertyBlockActionRegistration[] {
+		return Array.from(this.propertyBlockActions.values())
+			.filter((action) => action.isVisible?.(context) !== false)
+			.sort((left, right) => (left.order ?? 0) - (right.order ?? 0)
+				|| left.title.localeCompare(right.title));
 	}
 
 	getPropertyPreset(ownerPluginId: string, presetId: string): PropertyDefinition | null {
