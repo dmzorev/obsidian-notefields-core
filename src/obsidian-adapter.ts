@@ -788,6 +788,7 @@ function positionDisplayedTitle(
 ): void {
 	let frame = 0;
 	let disposed = false;
+	let wasConnected = false;
 	const timeouts: number[] = [];
 
 	const update = (): void => {
@@ -796,9 +797,13 @@ function positionDisplayedTitle(
 			return;
 		}
 		if (!titleEl.isConnected) {
-			cleanup();
+			titleEl.addClass("is-layout-pending");
+			if (wasConnected) {
+				cleanup();
+			}
 			return;
 		}
+		wasConnected = true;
 		const inputRect = inputEl.getBoundingClientRect();
 		const containerRect = containerEl.getBoundingClientRect();
 		if (inputRect.width === 0 || inputRect.height === 0) {
@@ -872,9 +877,12 @@ function positionDisplayedTitle(
 	displayedTitlePositioners.set(titleEl, cleanup);
 	update();
 	schedule();
-	for (const delay of [50, 150, 400]) {
+	for (const delay of [50, 150, 400, 1000]) {
 		timeouts.push(window.setTimeout(schedule, delay));
 	}
+	timeouts.push(window.setTimeout(() => {
+		if (!wasConnected && !titleEl.isConnected) cleanup();
+	}, 5000));
 }
 
 const displayedTitlePositioners = new Map<HTMLElement, () => void>();
