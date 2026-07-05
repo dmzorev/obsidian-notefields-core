@@ -154,7 +154,10 @@ export interface SelectPropertyConfig {
 	placeholder?: string;
 }
 
+export type NestedRootKind = "object" | "object-list";
+
 export interface NestedPropertyConfig {
+	defaultRootKind: NestedRootKind;
 	defaultCollapsed: boolean;
 	basesShowRootBraces: boolean;
 	basesExpandNestedValues: boolean;

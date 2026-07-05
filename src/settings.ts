@@ -24,6 +24,7 @@ export const DEFAULT_SELECT_CONFIG: SelectPropertyConfig = {
 };
 
 export const DEFAULT_NESTED_CONFIG: NestedPropertyConfig = {
+	defaultRootKind: "object",
 	defaultCollapsed: false,
 	basesShowRootBraces: false,
 	basesExpandNestedValues: true,

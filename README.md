@@ -58,7 +58,7 @@ Capture the editor for a shared option collection with labels, icons, and colors
 
 ### Nested fields
 
-Edit YAML objects and lists without switching to Source mode. Nested fields support text, numbers, checkboxes, objects, and lists at any depth. Keys can be renamed inline, and each nested value can use an appropriate editor.
+Edit YAML objects and top-level lists of objects without switching to Source mode. Nested fields support text, numbers, checkboxes, objects, and lists at any depth. Keys can be renamed inline, and each nested value can use an appropriate editor.
 
 <!-- Screenshot slot: docs/assets/images/nested-fields.png
 Capture an expanded object containing a nested object, a list, a checkbox, and an empty property.

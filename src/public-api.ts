@@ -10,6 +10,8 @@ export type {
 	IconOptionCollection,
 	IconOptionInput,
 	ManagedPropertyBinding,
+	NestedPropertyConfig,
+	NestedRootKind,
 	NoteFieldsApi,
 	OptionMetadata,
 	OptionValue,

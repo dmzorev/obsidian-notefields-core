@@ -45,15 +45,18 @@ Enable **Allow custom values** to enter values that are not yet listed. Enable *
 
 Stored `[[wikilinks]]` remain strings, but NoteFields updates matching option values when the target note is renamed.
 
-## Nested object
+## Nested structures
 
-Nested fields edit schema-less YAML objects and lists recursively. Supported child values include text, numbers, checkboxes, objects, and lists.
+Nested fields edit schema-less YAML objects and top-level lists of objects recursively. Supported child values include text, numbers, checkboxes, objects, and lists.
 
 - Select a key to rename it.
 - Press **Enter** to save or **Escape** to cancel.
 - Select the type icon to change a child editor.
 - Use **Add property** for objects and **Add item** for lists.
 - Collapse large sections without losing their state during nearby edits.
+- Choose whether an empty field starts as an object or a list of objects in property settings.
+
+Top-level lists keep every item as an editable object and add new items as `{}`. Invalid scalar items remain visible so they can be converted or removed instead of being discarded.
 
 ## Icon Picker and Color Picker
 

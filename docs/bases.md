@@ -26,7 +26,7 @@ Buttons inside an expanded Nested editor keep the editor open, so adding an item
 
 Nested fields provide settings specifically for Bases:
 
-- show or hide braces around the root object;
+- show or hide braces or brackets around the root structure;
 - summarize nested objects and arrays by item count;
 - expand nested values into a more descriptive inline preview.
 
