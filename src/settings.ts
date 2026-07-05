@@ -25,8 +25,9 @@ export const DEFAULT_SELECT_CONFIG: SelectPropertyConfig = {
 
 export const DEFAULT_NESTED_CONFIG: NestedPropertyConfig = {
 	defaultRootKind: "object",
+	objectSummaryDisplay: "always",
 	defaultCollapsed: false,
-	basesShowRootBraces: false,
+	showOuterDelimiters: false,
 	basesExpandNestedValues: true,
 };
 
@@ -62,10 +63,26 @@ export function getDefaultConfig(
 
 export function normalizeDefinition(definition: PropertyDefinition): PropertyDefinition {
 	const typeId = migrateTypeId(definition.typeId);
+	const storedConfig = (definition.config ?? {}) as Record<string, unknown>;
 	const config = {
 		...getDefaultConfig(typeId),
-		...(definition.config as Record<string, unknown>),
+		...storedConfig,
 	} as Record<string, unknown>;
+	if (typeId === "notefields:nested") {
+		const summaryDisplay = storedConfig.objectSummaryDisplay;
+		config.objectSummaryDisplay = summaryDisplay === "collapsed" || summaryDisplay === "never" || summaryDisplay === "always"
+			? summaryDisplay
+			: typeof storedConfig.showRootObjectSummaries === "boolean"
+				? storedConfig.showRootObjectSummaries ? "always" : "never"
+				: "always";
+		config.showOuterDelimiters = typeof storedConfig.showOuterDelimiters === "boolean"
+			? storedConfig.showOuterDelimiters
+			: typeof storedConfig.basesShowRootBraces === "boolean"
+				? storedConfig.basesShowRootBraces
+				: false;
+		delete config.showRootObjectSummaries;
+		delete config.basesShowRootBraces;
+	}
 	if ((typeId === "notefields:select" || typeId === "notefields:multiselect") && !config.optionBinding) {
 		const legacyOptions = Array.isArray(config.options)
 			? (config.options as unknown[]).filter(isStoredValueOption).map((option) => normalizeValueOption(option))

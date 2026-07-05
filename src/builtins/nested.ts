@@ -27,8 +27,9 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 		icon: "lucide-braces",
 		defaultConfig: {
 			defaultRootKind: "object",
+			objectSummaryDisplay: "always",
 			defaultCollapsed: false,
-			basesShowRootBraces: false,
+			showOuterDelimiters: false,
 			basesExpandNestedValues: true,
 		},
 		validate(value) {
@@ -78,6 +79,26 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 					}));
 
 			new Setting(el)
+				.setName("Object summaries")
+				.setDesc("Choose when compact object previews are shown at any nesting level.")
+				.addDropdown((dropdown) => dropdown
+					.addOption("always", "Always")
+					.addOption("collapsed", "When collapsed")
+					.addOption("never", "Never")
+					.setValue(ctx.definition.config.objectSummaryDisplay)
+					.onChange(async (objectSummaryDisplay) => {
+						await ctx.updateDefinition({
+							...ctx.definition,
+							config: {
+								...ctx.definition.config,
+								objectSummaryDisplay: objectSummaryDisplay === "collapsed" || objectSummaryDisplay === "never"
+									? objectSummaryDisplay
+									: "always",
+							},
+						});
+					}));
+
+			new Setting(el)
 				.setName("Collapsed by default")
 				.addToggle((toggle) => toggle
 					.setValue(ctx.definition.config.defaultCollapsed)
@@ -92,16 +113,16 @@ export function createNestedType(): PropertyType<NestedPropertyConfig> {
 					}));
 
 			new Setting(el)
-				.setName("Show outer delimiters in bases")
-				.setDesc("Wrap top-level previews in braces or brackets.")
+				.setName("Show outer delimiters")
+				.setDesc("Wrap previews in bases and nested summaries in braces or brackets.")
 				.addToggle((toggle) => toggle
-					.setValue(ctx.definition.config.basesShowRootBraces)
-					.onChange(async (basesShowRootBraces) => {
+					.setValue(ctx.definition.config.showOuterDelimiters)
+					.onChange(async (showOuterDelimiters) => {
 						await ctx.updateDefinition({
 							...ctx.definition,
 							config: {
 								...ctx.definition.config,
-								basesShowRootBraces,
+								showOuterDelimiters,
 							},
 						});
 					}));
@@ -134,7 +155,7 @@ function renderNestedEditor(
 		el.empty();
 		const rootEl = el.createDiv({ cls: ["props-framework-nested", "is-editing"] });
 		containMetadataEvents(rootEl);
-		renderNestedRoot(rootEl, value, ctx.config.defaultCollapsed, collapsedPaths, (nextValue) => {
+		renderNestedRoot(rootEl, value, ctx.config, collapsedPaths, (nextValue) => {
 			value = nextValue;
 			ctx.onChange(nextValue);
 			render();
@@ -186,7 +207,7 @@ function renderNestedBase(
 		containMetadataEvents(rootEl);
 
 		if (isEditing) {
-			renderNestedRoot(rootEl, value, ctx.config.defaultCollapsed, collapsedPaths, (nextValue) => {
+			renderNestedRoot(rootEl, value, ctx.config, collapsedPaths, (nextValue) => {
 				value = nextValue;
 				hostEl.addClass(BASES_EDITING_CLASS);
 				ctx.onChange(nextValue);
@@ -239,18 +260,18 @@ function formatRootPreview(value: NestedRootValue, config: NestedPropertyConfig)
 	if (Array.isArray(value)) {
 		if (value.length === 0) return "";
 		if (!config.basesExpandNestedValues) {
-			return config.basesShowRootBraces ? `[${String(value.length)}]` : `${String(value.length)} items`;
+			return config.showOuterDelimiters ? `[${String(value.length)}]` : `${String(value.length)} items`;
 		}
 		const items = value.slice(0, 6).map((item) => formatPreviewValue(item, true, 0));
 		if (value.length > items.length) items.push("...");
 		const content = items.join(", ");
-		return config.basesShowRootBraces ? `[ ${content} ]` : content;
+		return config.showOuterDelimiters ? `[ ${content} ]` : content;
 	}
 
 	const entries = Object.entries(value);
 	if (entries.length === 0) return "";
 	const content = formatPreviewEntries(entries, config.basesExpandNestedValues, 0);
-	return config.basesShowRootBraces ? `{ ${content} }` : content;
+	return config.showOuterDelimiters ? `{ ${content} }` : content;
 }
 
 function formatPreviewEntries(entries: Array<[string, unknown]>, expandNested: boolean, depth: number): string {
@@ -309,25 +330,25 @@ function focusFirstNestedControl(parentEl: HTMLElement): void {
 function renderNestedRoot(
 	parentEl: HTMLElement,
 	value: NestedRootValue,
-	defaultCollapsed: boolean,
+	config: NestedPropertyConfig,
 	collapsedPaths: Set<string>,
 	onChange: (value: NestedRootValue) => void
 ): void {
 	if (Array.isArray(value)) {
-		renderArray(parentEl, value, "", defaultCollapsed, collapsedPaths, onChange, {
+		renderArray(parentEl, value, "", config, collapsedPaths, onChange, {
 			allowedItemKinds: ["object"],
 			newItemKind: "object",
 		});
 		return;
 	}
-	renderObject(parentEl, value, "", defaultCollapsed, collapsedPaths, onChange);
+	renderObject(parentEl, value, "", config, collapsedPaths, onChange);
 }
 
 function renderObject(
 	parentEl: HTMLElement,
 	value: JsonObject,
 	parentPath: string,
-	defaultCollapsed: boolean,
+	config: NestedPropertyConfig,
 	collapsedPaths: Set<string>,
 	onChange: (value: JsonObject) => void
 ): void {
@@ -335,7 +356,7 @@ function renderObject(
 
 	for (const [key, childValue] of Object.entries(value)) {
 		const path = joinPath(parentPath, key);
-		renderEntry(entriesEl, key, childValue, path, true, defaultCollapsed, collapsedPaths, (nextChildValue) => {
+		renderEntry(entriesEl, key, childValue, path, true, config, collapsedPaths, (nextChildValue) => {
 			onChange({
 				...value,
 				[key]: nextChildValue,
@@ -365,7 +386,7 @@ function renderArray(
 	parentEl: HTMLElement,
 	value: unknown[],
 	parentPath: string,
-	defaultCollapsed: boolean,
+	config: NestedPropertyConfig,
 	collapsedPaths: Set<string>,
 	onChange: (value: unknown[]) => void,
 	options: ArrayRenderOptions = {}
@@ -374,7 +395,7 @@ function renderArray(
 
 	for (const [index, childValue] of value.entries()) {
 		const path = joinPath(parentPath, String(index));
-		renderEntry(entriesEl, String(index), childValue, path, false, defaultCollapsed, collapsedPaths, (nextChildValue) => {
+		renderEntry(entriesEl, String(index), childValue, path, false, config, collapsedPaths, (nextChildValue) => {
 			const nextValue = [...value];
 			nextValue[index] = nextChildValue;
 			onChange(nextValue);
@@ -399,15 +420,20 @@ function renderEntry(
 	value: unknown,
 	path: string,
 	showKey: boolean,
-	defaultCollapsed: boolean,
+	config: NestedPropertyConfig,
 	collapsedPaths: Set<string>,
 	onChange: (value: unknown) => void,
 	onDelete: () => void,
 	onRename?: (key: string) => boolean,
 	allowedKinds?: NewValueKind[]
 ): void {
+	const hasNestedValue = Array.isArray(value) || isPlainObject(value);
 	const rowEl = parentEl.createDiv({
-		cls: ["props-framework-nested-row", showKey ? "" : "is-array-item"],
+		cls: [
+			"props-framework-nested-row",
+			showKey ? "" : "is-array-item",
+			hasNestedValue ? "has-nested-value" : "",
+		],
 	});
 	if (showKey) {
 		const keyEl = rowEl.createDiv({ cls: "props-framework-nested-key" });
@@ -419,7 +445,7 @@ function renderEntry(
 	}
 
 	const valueEl = rowEl.createDiv({ cls: "props-framework-nested-value" });
-	renderNestedValue(valueEl, value, path, defaultCollapsed, collapsedPaths, onChange);
+	renderNestedValue(valueEl, value, path, config, collapsedPaths, onChange);
 
 	const actionsEl = rowEl.createDiv({ cls: "props-framework-nested-actions" });
 	const deleteButton = renderButton(actionsEl, `Remove ${key}`, "lucide-trash-2", true);
@@ -542,21 +568,29 @@ function renderNestedValue(
 	parentEl: HTMLElement,
 	value: unknown,
 	path: string,
-	defaultCollapsed: boolean,
+	config: NestedPropertyConfig,
 	collapsedPaths: Set<string>,
 	onChange: (value: unknown) => void
 ): void {
 	if (Array.isArray(value)) {
-		renderCollapsible(parentEl, path, "[ ... ]", defaultCollapsed, collapsedPaths, (bodyEl) => {
-			renderArray(bodyEl, value, path, defaultCollapsed, collapsedPaths, onChange);
+		renderCollapsible(parentEl, path, formatArrayEditorSummary(config.showOuterDelimiters), "always", config.defaultCollapsed, collapsedPaths, (bodyEl) => {
+			renderArray(bodyEl, value, path, config, collapsedPaths, onChange);
 		});
 		return;
 	}
 
 	if (isPlainObject(value)) {
-		renderCollapsible(parentEl, path, formatObjectEditorSummary(value), defaultCollapsed, collapsedPaths, (bodyEl) => {
-			renderObject(bodyEl, value, path, defaultCollapsed, collapsedPaths, onChange);
-		});
+		renderCollapsible(
+			parentEl,
+			path,
+			formatObjectEditorSummary(value, config.showOuterDelimiters),
+			config.objectSummaryDisplay,
+			config.defaultCollapsed,
+			collapsedPaths,
+			(bodyEl) => {
+				renderObject(bodyEl, value, path, config, collapsedPaths, onChange);
+			}
+		);
 		return;
 	}
 
@@ -592,6 +626,7 @@ function renderCollapsible(
 	parentEl: HTMLElement,
 	path: string,
 	summary: string,
+	summaryDisplay: NestedPropertyConfig["objectSummaryDisplay"],
 	defaultCollapsed: boolean,
 	collapsedPaths: Set<string>,
 	renderBody: (bodyEl: HTMLElement) => void
@@ -602,7 +637,13 @@ function renderCollapsible(
 	});
 	const headerEl = wrapperEl.createDiv({ cls: "props-framework-nested-summary" });
 	const toggleButton = renderButton(headerEl, "Toggle nested value", "right-triangle", true);
-	headerEl.createSpan({ text: summary });
+	const summaryEl = headerEl.createSpan({ cls: "props-framework-nested-summary-text", text: summary });
+	const updateSummaryVisibility = (): void => {
+		const showSummary = summaryDisplay === "always"
+			|| (summaryDisplay === "collapsed" && wrapperEl.hasClass("is-collapsed"));
+		summaryEl.toggleClass("is-hidden", !showSummary);
+	};
+	updateSummaryVisibility();
 
 	const bodyEl = wrapperEl.createDiv({ cls: "props-framework-nested-body" });
 	renderBody(bodyEl);
@@ -611,6 +652,7 @@ function renderCollapsible(
 		stopMetadataEvent(event);
 		const nextCollapsed = !wrapperEl.hasClass("is-collapsed");
 		wrapperEl.toggleClass("is-collapsed", nextCollapsed);
+		updateSummaryVisibility();
 		if (nextCollapsed) {
 			collapsedPaths.add(path);
 			collapsedPaths.delete(`${path}:expanded`);
@@ -731,19 +773,26 @@ function inferNewArrayItemKind(value: unknown[], fallback: NewValueKind): NewVal
 	return kinds.every((kind) => kind === kinds[0]) ? kinds[0]! : fallback;
 }
 
-function formatObjectEditorSummary(value: JsonObject): string {
+function formatArrayEditorSummary(showOuterDelimiters: boolean): string {
+	return showOuterDelimiters ? "[ ... ]" : "...";
+}
+
+function formatObjectEditorSummary(value: JsonObject, showOuterDelimiters: boolean): string {
 	const entries = Object.entries(value);
-	if (entries.length === 0) return "{ ... }";
+	if (entries.length === 0) return showOuterDelimiters ? "{ ... }" : "...";
 	const scalarEntries = entries
 		.filter((entry): entry is [string, string | number | boolean] => {
 			return typeof entry[1] === "string" || typeof entry[1] === "number" || typeof entry[1] === "boolean";
 		})
 		.slice(0, 2)
 		.map(([key, childValue]) => `${key}: ${String(childValue)}`);
-	if (scalarEntries.length === 0) return `{ ${String(entries.length)} properties }`;
-	const summary = scalarEntries.join(", ");
-	const truncated = summary.length > 48 ? `${summary.slice(0, 47)}...` : summary;
-	return `{ ${truncated}${entries.length > scalarEntries.length ? ", ..." : ""} }`;
+	let content = `${String(entries.length)} properties`;
+	if (scalarEntries.length > 0) {
+		const summary = scalarEntries.join(", ");
+		const truncated = summary.length > 48 ? `${summary.slice(0, 47)}...` : summary;
+		content = `${truncated}${entries.length > scalarEntries.length ? ", ..." : ""}`;
+	}
+	return showOuterDelimiters ? `{ ${content} }` : content;
 }
 
 function isPlainObject(value: unknown): value is JsonObject {

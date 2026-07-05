@@ -13,7 +13,7 @@ NoteFields field definitions apply to the same property in notes and Obsidian Ba
 
 - Select and Multiselect use compact, single-line values and clip overflow in narrow columns.
 - Icon and Color fields keep their visual picker representation.
-- Nested fields use a concise one-line summary when the cell is not active.
+- Nested fields use a concise one-line summary when the cell is not active. Outer braces and brackets follow the field's delimiter setting.
 - Empty Nested objects display as an empty cell rather than explanatory placeholder text.
 
 ## Editing

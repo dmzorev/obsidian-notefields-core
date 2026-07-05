@@ -55,6 +55,8 @@ Nested fields edit schema-less YAML objects and top-level lists of objects recur
 - Use **Add property** for objects and **Add item** for lists.
 - Collapse large sections without losing their state during nearby edits.
 - Choose whether an empty field starts as an object or a list of objects in property settings.
+- Show compact object summaries always, only while collapsed, or never. The choice applies at every nesting level.
+- Show or hide outer braces and brackets consistently in nested summaries and Bases previews.
 
 Top-level lists keep every item as an editable object and add new items as `{}`. Invalid scalar items remain visible so they can be converted or removed instead of being discarded.
 

@@ -731,7 +731,7 @@ button.props-framework-value-pill {
 
 .props-framework-nested-row {
 	display: grid;
-	grid-template-columns: minmax(90px, 140px) minmax(160px, 1fr) auto;
+	grid-template-columns: minmax(72px, 120px) minmax(0, 1fr) 28px;
 	align-items: start;
 	gap: 6px;
 	padding: 3px 0;
@@ -739,7 +739,7 @@ button.props-framework-value-pill {
 }
 
 .props-framework-nested-row.is-array-item {
-	grid-template-columns: auto minmax(160px, 1fr) auto;
+	grid-template-columns: 24px minmax(0, 1fr) 28px;
 }
 
 .props-framework-nested-key {
@@ -823,6 +823,60 @@ button.props-framework-value-pill {
 .props-framework-nested-actions {
 	display: flex;
 	justify-content: flex-end;
+	opacity: 0;
+	transition: opacity 100ms ease;
+}
+
+.props-framework-nested-row:has(> .props-framework-nested-key:hover)
+	> .props-framework-nested-actions,
+.props-framework-nested-row:has(> .props-framework-nested-array-type:hover)
+	> .props-framework-nested-actions,
+.props-framework-nested-row:not(.has-nested-value):has(> .props-framework-nested-value:hover)
+	> .props-framework-nested-actions,
+.props-framework-nested-row.has-nested-value:has(
+		> .props-framework-nested-value
+			> .props-framework-nested-collapsible
+			> .props-framework-nested-summary:hover
+	)
+	> .props-framework-nested-actions,
+.props-framework-nested-row:has(> .props-framework-nested-key:focus-within)
+	> .props-framework-nested-actions,
+.props-framework-nested-row:has(> .props-framework-nested-array-type:focus-within)
+	> .props-framework-nested-actions,
+.props-framework-nested-row:not(.has-nested-value):has(> .props-framework-nested-value:focus-within)
+	> .props-framework-nested-actions,
+.props-framework-nested-row.has-nested-value:has(
+		> .props-framework-nested-value
+			> .props-framework-nested-collapsible
+			> .props-framework-nested-summary:focus-within
+	)
+	> .props-framework-nested-actions,
+.props-framework-nested-row > .props-framework-nested-actions:hover,
+.props-framework-nested-row > .props-framework-nested-actions:focus-within {
+	opacity: 1;
+}
+
+.props-framework-nested-row.has-nested-value > .props-framework-nested-value,
+.props-framework-nested-row.has-nested-value
+	> .props-framework-nested-value
+	> .props-framework-nested-collapsible {
+	display: contents;
+}
+
+.props-framework-nested-row.has-nested-value
+	> .props-framework-nested-value
+	> .props-framework-nested-collapsible
+	> .props-framework-nested-summary {
+	grid-column: 2;
+	grid-row: 1;
+}
+
+.props-framework-nested-row.has-nested-value
+	> .props-framework-nested-value
+	> .props-framework-nested-collapsible
+	> .props-framework-nested-body {
+	grid-column: 1 / 3;
+	grid-row: 2;
 }
 
 .props-framework-nested-collapsible.is-collapsed .props-framework-nested-body {
@@ -841,10 +895,28 @@ button.props-framework-value-pill {
 	cursor: var(--cursor);
 }
 
+.props-framework-nested-summary-text.is-hidden {
+	display: none;
+}
+
 .props-framework-nested-body {
-	margin-left: 12px;
-	padding-left: 8px;
+	margin-left: 4px;
+	padding-left: 5px;
 	border-left: 1px solid var(--background-modifier-border);
+}
+
+.props-framework-nested-body .props-framework-nested-row {
+	grid-template-columns: minmax(64px, 108px) minmax(0, 1fr) 28px;
+}
+
+.props-framework-nested-body .props-framework-nested-row.is-array-item {
+	grid-template-columns: 24px minmax(0, 1fr) 28px;
+}
+
+@media (hover: none) {
+	.props-framework-nested-actions {
+		opacity: 1;
+	}
 }
 
 .props-framework-add-property {
@@ -953,14 +1025,14 @@ button.notefields-hidden-properties-toggle {
 
 @media (max-width: 600px) {
 	.props-framework-nested-row {
-		grid-template-columns: 1fr auto;
+		grid-template-columns: minmax(64px, 96px) minmax(0, 1fr) 28px;
 	}
 
 	.props-framework-nested-row.is-array-item {
-		grid-template-columns: auto 1fr auto;
+		grid-template-columns: 24px minmax(0, 1fr) 28px;
 	}
 
 	.props-framework-nested-key {
-		grid-column: 1 / -1;
+		grid-column: auto;
 	}
 }

@@ -155,11 +155,13 @@ export interface SelectPropertyConfig {
 }
 
 export type NestedRootKind = "object" | "object-list";
+export type NestedObjectSummaryDisplay = "always" | "collapsed" | "never";
 
 export interface NestedPropertyConfig {
 	defaultRootKind: NestedRootKind;
+	objectSummaryDisplay: NestedObjectSummaryDisplay;
 	defaultCollapsed: boolean;
-	basesShowRootBraces: boolean;
+	showOuterDelimiters: boolean;
 	basesExpandNestedValues: boolean;
 }
 
